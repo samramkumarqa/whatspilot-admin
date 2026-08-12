@@ -1,0 +1,44 @@
+services:
+  - type: web
+    name: whatspilot-admin
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # --proxy-headers + --forwarded-allow-ips="*" matter beyond just
+    # logging: rate_limit.py's admin-login limiter keys on
+    # request.client.host, and Render sits in front of the app as a
+    # proxy - without these flags every visitor would show up as
+    # Render's internal proxy IP, making the rate limit apply globally
+    # across all visitors instead of per-visitor. These flags tell
+    # uvicorn to trust Render's X-Forwarded-For header and use the real
+    # client IP instead.
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DEBUG
+        value: "false"
+      - key: SESSION_SECRET_KEY
+        generateValue: true
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD_HASH
+        sync: false
+      # Same shared Postgres the business-portal deployments connect to
+      # (Render dashboard -> your Postgres -> Internal Database URL).
+      - key: DATABASE_URL
+        sync: false
+      # Provisioning: lets this app create a new GitHub repo (from the
+      # whatspilot-business template) and a new Render web service
+      # whenever a business is added in the registry. See config.py.
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_ORG
+        sync: false
+      - key: GITHUB_TEMPLATE_REPO
+        value: whatspilot-business-template
+      - key: RENDER_API_KEY
+        sync: false
+      - key: RENDER_OWNER_ID
+        sync: false

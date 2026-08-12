@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login - Website AI Assistant</title>
+
+    <style>
+
+:root {
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-blue: #3b82f6;
+
+  --color-gray-500: #94a3b8;
+  --color-gray-600: #64748b;
+  --color-text-dark: #1e293b;
+  --color-text-darkest: #0f172a;
+
+  --color-danger: #ef4444;
+  --color-danger-light: #fee2e2;
+  --color-danger-dark: #dc2626;
+
+  --shadow-md: rgba(0, 0, 0, 0.08);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+
+  font-family: "Segoe UI", sans-serif;
+
+  background: #f4f7fb;
+
+  color: var(--color-text-dark);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 14px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+
+  background: white;
+  border-radius: 18px;
+  padding: 32px 30px;
+
+  box-shadow: 0 8px 20px var(--shadow-md);
+}
+
+.login-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+
+  margin-bottom: 24px;
+}
+
+.logo-circle {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-blue));
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.25);
+}
+
+.login-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.login-subtitle {
+  font-size: 13px;
+  color: var(--color-gray-600);
+  text-align: center;
+}
+
+label {
+  display: block;
+  font-weight: 600;
+  margin-top: 14px;
+  font-size: 14px;
+}
+
+input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  margin-top: 5px;
+  font-size: 14px;
+}
+
+button {
+  width: 100%;
+
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 18px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+
+  margin-top: 20px;
+}
+
+button:hover {
+  background: var(--color-primary-hover);
+  transform: translateY(-2px);
+}
+
+.login-error {
+  margin-top: 16px;
+  padding: 10px 14px;
+  background: var(--color-danger-light);
+  border-radius: 8px;
+  color: var(--color-danger-dark);
+  font-size: 13px;
+  text-align: center;
+}
+
+.login-switch {
+  margin-top: 18px;
+  font-size: 13px;
+  color: var(--color-gray-600);
+  text-align: center;
+}
+
+.login-switch a {
+  color: var(--color-primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.login-switch a:hover {
+  text-decoration: underline;
+}
+
+    </style>
+
+</head>
+
+<body>
+
+<div class="login-card">
+
+    <div class="login-brand">
+        <div class="logo-circle">🔒</div>
+        <div class="login-title">WhatsPilot Admin</div>
+        <div class="login-subtitle">Sign in to manage businesses and settings</div>
+    </div>
+
+    <form method="post" action="/login">
+
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" autocomplete="current-password" required>
+
+        <button type="submit">Sign In</button>
+
+    </form>
+
+    {% if error == "ratelimited" %}
+    <div class="login-error">
+        Too many attempts. Please wait a few minutes and try again.
+    </div>
+    {% elif error %}
+    <div class="login-error">
+        Invalid username or password.
+    </div>
+    {% endif %}
+
+    <div class="login-switch">
+        Business owner? <a href="/business-login">Log in with your WhatsApp number</a>
+    </div>
+
+</div>
+
+</body>
+</html>

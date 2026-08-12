@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Businesses - Website AI Assistant</title>
+
+    <style>
+
+:root {
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-light: #dbeafe;
+  --color-primary-lighter: #eff6ff;
+  --color-blue: #3b82f6;
+
+  --color-gray-50: #f8fafc;
+  --color-gray-100: #e2e8f0;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #cbd5e1;
+  --color-gray-500: #94a3b8;
+  --color-gray-600: #64748b;
+  --color-gray-700: #475569;
+  --color-text-dark: #1e293b;
+  --color-text-darkest: #0f172a;
+
+  --color-danger: #ef4444;
+  --color-danger-dark: #dc2626;
+  --color-danger-light: #fee2e2;
+
+  --color-warning: #f59e0b;
+  --color-warning-dark: #92400e;
+  --color-warning-light: #fef3c7;
+
+  --color-success: #22c55e;
+  --color-success-dark: #166534;
+  --color-success-light: #dcfce7;
+
+  --shadow-sm: rgba(0, 0, 0, 0.05);
+  --shadow-md: rgba(0, 0, 0, 0.08);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+
+  font-family: "Segoe UI", sans-serif;
+
+  background: #f4f7fb;
+
+  color: var(--color-text-dark);
+
+  padding: 14px;
+}
+
+/* HEADER */
+
+.crm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: white;
+  border-radius: 18px;
+  padding: 18px 26px;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 20px var(--shadow-md);
+}
+
+.crm-brand {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.logo-circle {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-blue));
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.25);
+}
+
+.crm-title {
+  margin: 0;
+  font-size: 28px;
+  color: var(--color-primary);
+}
+
+.crm-header-right {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.header-link-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  border-radius: 12px;
+  background: var(--color-gray-50);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-primary);
+  text-decoration: none;
+  padding: 10px 18px;
+  transition: 0.2s;
+}
+
+.header-link-btn:hover {
+  background: var(--color-primary-lighter);
+}
+
+/* CARD */
+
+.card {
+  background: white;
+  border: none;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 15px var(--shadow-md);
+}
+
+h2 {
+  margin-bottom: 20px;
+  font-size: 32px;
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
+.card > h3 {
+  margin-bottom: 18px;
+  margin-top: 8px;
+}
+
+/* BUTTONS */
+
+button {
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+button:hover {
+  background: var(--color-primary-hover);
+  transform: translateY(-2px);
+}
+
+button:disabled {
+  background: var(--color-gray-50);
+  color: var(--color-gray-500);
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* INPUTS */
+
+label {
+  display: block;
+  font-weight: 600;
+  margin-top: 12px;
+}
+
+.field-hint {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--color-gray-600);
+  margin-top: 2px;
+}
+
+input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  margin-top: 5px;
+  margin-bottom: 10px;
+}
+
+.field-error {
+  display: none;
+  margin-top: -6px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--color-danger-dark);
+}
+
+.field-error.visible {
+  display: block;
+}
+
+input.field-invalid {
+  border-color: var(--color-danger);
+}
+
+#registerStatus {
+  margin-top: 10px;
+  color: var(--color-gray-600);
+  font-size: 14px;
+}
+
+/* BUSINESS LIST */
+
+.business-list {
+  list-style: none;
+}
+
+.business-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--color-gray-100);
+}
+
+.business-row:last-child {
+  border-bottom: none;
+}
+
+.business-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.business-user-id {
+  font-weight: 700;
+  color: var(--color-text-darkest);
+}
+
+.business-meta {
+  margin-top: 3px;
+  font-size: 13px;
+  color: var(--color-gray-600);
+  word-break: break-all;
+}
+
+.business-status-badge {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.business-status-badge.active {
+  background: var(--color-success-light);
+  color: var(--color-success-dark);
+}
+
+.business-status-badge.inactive {
+  background: var(--color-gray-100);
+  color: var(--color-gray-600);
+}
+
+.business-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+}
+
+.activate-btn {
+  background: var(--color-success-dark);
+}
+
+.activate-btn:hover {
+  background: #14532d;
+}
+
+.deactivate-btn {
+  background: var(--color-gray-500);
+}
+
+.deactivate-btn:hover {
+  background: var(--color-gray-600);
+}
+
+.delete-btn {
+  background: var(--color-danger);
+}
+
+.delete-btn:hover {
+  background: var(--color-danger-dark);
+}
+
+.view-btn {
+  background: var(--color-blue);
+}
+
+.view-btn:hover {
+  background: var(--color-primary-hover);
+}
+
+.business-list-empty {
+  padding: 14px 0;
+  color: var(--color-gray-600);
+  font-size: 14px;
+}
+
+/* COLLAPSIBLE HELP BLOCK */
+
+.help-details {
+  background: var(--color-gray-50);
+  border: 1px solid var(--color-gray-100);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-top: 12px;
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: var(--color-gray-700);
+}
+
+.help-details summary {
+  font-weight: 700;
+  cursor: pointer;
+  color: var(--color-text-dark);
+  user-select: none;
+}
+
+.help-details[open] summary {
+  margin-bottom: 10px;
+}
+
+.help-details p {
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+.help-details p:first-of-type {
+  margin-top: 0;
+}
+
+    </style>
+
+</head>
+
+<body>
+
+<!-- ===================================================== -->
+<!-- HEADER -->
+<!-- ===================================================== -->
+
+<div class="crm-header">
+
+    <div class="crm-brand">
+
+        <div class="logo-circle">
+            🏢
+        </div>
+
+        <div>
+            <h2 class="crm-title" style="margin:0;">
+                Businesses
+            </h2>
+        </div>
+
+    </div>
+
+    <div class="crm-header-right">
+
+        <a href="/logout" class="header-link-btn" title="Logout">
+            Logout
+        </a>
+
+    </div>
+
+</div>
+
+<!-- ===================================================== -->
+<!-- REGISTER NEW BUSINESS -->
+<!-- ===================================================== -->
+
+<div class="card">
+
+    <h3>➕ Register New Business</h3>
+
+    <label>Business WhatsApp Number</label>
+    <div class="field-hint">
+        The Twilio-connected number customers message and the bot
+        replies from - also where you'll receive your login OTP.
+    </div>
+    <input
+        id="bizWhatsappNumber"
+        placeholder="+14155238886"
+        maxlength="16"
+        inputmode="tel"
+        oninput="sanitizePhoneField(this, 'bizWhatsappNumber')"
+    >
+    <div id="bizWhatsappNumberError" class="field-error"></div>
+
+    <label>Account ID (user_id)</label>
+    <div class="field-hint">
+        Used throughout the app/URLs to identify this business - often
+        the same as the WhatsApp number above, but doesn't have to be.
+    </div>
+    <input
+        id="bizUserId"
+        placeholder="+14155238886"
+        maxlength="50"
+        oninput="sanitizeUserIdField(this)"
+    >
+    <div id="bizUserIdError" class="field-error"></div>
+
+    <label>Owner's Personal WhatsApp Number (optional - rarely needed)</label>
+    <div class="field-hint">
+        Most businesses can leave this blank. By default the owner logs
+        in at <a href="/business-login">/business-login</a> with the
+        Business WhatsApp Number above - the login code is sent there by
+        SMS, not WhatsApp, so it doesn't matter that the number itself
+        can't receive normal WhatsApp messages. Only fill this in if the
+        owner should log in with a completely different number instead.
+    </div>
+    <input
+        id="bizOwnerNumber"
+        placeholder="+919876543210"
+        maxlength="16"
+        inputmode="tel"
+        oninput="sanitizePhoneField(this, 'bizOwnerNumber')"
+    >
+    <div id="bizOwnerNumberError" class="field-error"></div>
+
+    <button id="registerBtn" onclick="registerBusiness()">
+        Add Business
+    </button>
+
+    <details class="help-details">
+        <summary>ℹ️ What happens after I add a business?</summary>
+        <p>
+            A new business starts <strong>Inactive</strong> - it's
+            registered, but automation rules won't run for it and its
+            owner won't be able to sign in at
+            <a href="/business-login">/business-login</a> yet.
+        </p>
+        <p>
+            Click <strong>Activate</strong> on the business below when
+            it's ready to go live. By default the owner logs in with the
+            Business WhatsApp Number above - no separate personal number
+            needed - and their login code arrives there by SMS.
+        </p>
+    </details>
+
+    <div id="registerStatus"></div>
+
+</div>
+
+<!-- ===================================================== -->
+<!-- REGISTERED BUSINESSES -->
+<!-- ===================================================== -->
+
+<div class="card">
+
+    <h3>📋 Registered Businesses</h3>
+
+    <ul id="businessList" class="business-list"></ul>
+
+</div>
+
+<script>
+
+function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text == null ? "" : String(text);
+    return div.innerHTML;
+}
+
+const FIELD_LIMITS = {
+    bizWhatsappNumber: 16,
+    bizUserId: 50,
+    bizOwnerNumber: 16
+};
+
+function showFieldError(fieldId, message) {
+    const input = document.getElementById(fieldId);
+    const errorEl = document.getElementById(`${fieldId}Error`);
+
+    if (input) input.classList.add("field-invalid");
+    if (errorEl) {
+        errorEl.textContent = message;
+        errorEl.classList.add("visible");
+    }
+}
+
+function clearFieldError(fieldId) {
+    const input = document.getElementById(fieldId);
+    const errorEl = document.getElementById(`${fieldId}Error`);
+
+    if (input) input.classList.remove("field-invalid");
+    if (errorEl) {
+        errorEl.textContent = "";
+        errorEl.classList.remove("visible");
+    }
+}
+
+// WhatsApp Number fields: digits only, with an optional single leading "+".
+function sanitizePhoneField(el, fieldId) {
+    const hasLeadingPlus = el.value.startsWith("+");
+    const digits = el.value.replace(/[^0-9]/g, "");
+    el.value = (hasLeadingPlus ? "+" : "") + digits;
+
+    clearFieldError(fieldId);
+}
+
+// Account ID: letters, numbers, and + - _ . - permissive since it's not
+// necessarily a phone number (see the field's help text / the "testB"
+// slug-style account already in production).
+function sanitizeUserIdField(el) {
+    el.value = el.value.replace(/[^a-zA-Z0-9+\-_.]/g, "");
+    clearFieldError("bizUserId");
+}
+
+function validatePhone(value, label, required) {
+    if (!value)
+        return required ? `${label} is required.` : null;
+
+    if (!/^\+?[0-9]{7,15}$/.test(value))
+        return `${label} must be 7-15 digits, with an optional leading +.`;
+
+    return null;
+}
+
+function validateUserId(value) {
+    if (!value)
+        return "Account ID is required.";
+
+    if (value.length > FIELD_LIMITS.bizUserId)
+        return `Account ID must be ${FIELD_LIMITS.bizUserId} characters or fewer.`;
+
+    if (!/^[a-zA-Z0-9+\-_.]+$/.test(value))
+        return "Account ID can only contain letters, numbers, and + - _ .";
+
+    return null;
+}
+
+async function registerBusiness() {
+
+    const whatsappNumber = document.getElementById("bizWhatsappNumber").value.trim();
+    const userId = document.getElementById("bizUserId").value.trim();
+    const ownerNumber = document.getElementById("bizOwnerNumber").value.trim();
+
+    const whatsappError = validatePhone(whatsappNumber, "Business WhatsApp Number", true);
+    if (whatsappError) {
+        showFieldError("bizWhatsappNumber", whatsappError);
+        return;
+    }
+    clearFieldError("bizWhatsappNumber");
+
+    const userIdError = validateUserId(userId);
+    if (userIdError) {
+        showFieldError("bizUserId", userIdError);
+        return;
+    }
+    clearFieldError("bizUserId");
+
+    const ownerError = validatePhone(ownerNumber, "Owner's Personal WhatsApp Number", false);
+    if (ownerError) {
+        showFieldError("bizOwnerNumber", ownerError);
+        return;
+    }
+    clearFieldError("bizOwnerNumber");
+
+    const registerBtn = document.getElementById("registerBtn");
+    registerBtn.disabled = true;
+
+    try {
+
+        const response = await fetch("/business-registry", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                user_id: userId,
+                whatsapp_number: whatsappNumber,
+                owner_whatsapp_number: ownerNumber || null
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            document.getElementById("registerStatus").innerText =
+                `❌ ${data.detail || "Failed to register business."}`;
+            return;
+        }
+
+        document.getElementById("registerStatus").innerText =
+            `✅ ${data.business.business_id} registered - click Activate when ready.`;
+
+        document.getElementById("bizWhatsappNumber").value = "";
+        document.getElementById("bizUserId").value = "";
+        document.getElementById("bizOwnerNumber").value = "";
+
+        await loadBusinesses();
+
+    } finally {
+        registerBtn.disabled = false;
+    }
+}
+
+async function setBusinessStatus(userId, status) {
+
+    const response = await fetch(
+        `/business-registry/${encodeURIComponent(userId)}/status`,
+        {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ status })
+        }
+    );
+
+    const data = await response.json();
+
+    if (data.status !== "success") {
+        alert(`❌ ${data.detail || "Failed to update business status."}`);
+        return;
+    }
+
+    await loadBusinesses();
+}
+
+async function deleteBusinessRow(userId) {
+
+    if (!confirm(
+        `Remove ${userId} from the business registry? Its rules, leads, ` +
+        `and messages are NOT deleted, just no longer reachable through ` +
+        `this business.`
+    )) return;
+
+    const response = await fetch(
+        `/business-registry/${encodeURIComponent(userId)}`,
+        { method: "DELETE" }
+    );
+
+    const data = await response.json();
+
+    if (data.status !== "success") {
+        alert(`❌ ${data.detail || "Failed to delete business."}`);
+        return;
+    }
+
+    await loadBusinesses();
+}
+
+function createBusinessRow(biz) {
+
+    const li = document.createElement("li");
+    li.className = "business-row";
+
+    const isActive = biz.status === "active";
+
+    li.innerHTML = `
+        <div class="business-main">
+            <div class="business-user-id">
+                ${escapeHtml(biz.user_id)}
+            </div>
+            <div class="business-meta">
+                ${escapeHtml(biz.business_id || "—")} ·
+                ${escapeHtml(biz.whatsapp_number)}
+                ${biz.owner_whatsapp_number
+                    ? ` · Owner: ${escapeHtml(biz.owner_whatsapp_number)}`
+                    : ""}
+            </div>
+        </div>
+        <div class="business-status-badge ${isActive ? "active" : "inactive"}">
+            ${isActive ? "Active" : "Inactive"}
+        </div>
+        <div class="business-actions"></div>
+    `;
+
+    const actions = li.querySelector(".business-actions");
+
+    // Only active businesses have a working dashboard to view - the
+    // admin picks which business's dashboard/analytics/settings pages
+    // render via this ?business= param (see auth.py's
+    // resolve_dashboard_user_id()); inactive businesses aren't
+    // meaningful to view yet, same gate as business-owner login itself.
+    if (isActive) {
+        const viewBtn = document.createElement("button");
+        viewBtn.className = "view-btn";
+        viewBtn.textContent = "View Dashboard";
+        viewBtn.onclick = () => {
+            window.location.href = `/?business=${encodeURIComponent(biz.user_id)}`;
+        };
+        actions.appendChild(viewBtn);
+    }
+
+    const toggleBtn = document.createElement("button");
+    toggleBtn.className = isActive ? "deactivate-btn" : "activate-btn";
+    toggleBtn.textContent = isActive ? "Deactivate" : "Activate";
+    toggleBtn.onclick = () => setBusinessStatus(biz.user_id, isActive ? "inactive" : "active");
+    actions.appendChild(toggleBtn);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "delete-btn";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.onclick = () => deleteBusinessRow(biz.user_id);
+    actions.appendChild(deleteBtn);
+
+    return li;
+}
+
+async function loadBusinesses() {
+
+    const response = await fetch("/business-registry");
+    const data = await response.json();
+
+    const list = document.getElementById("businessList");
+    list.innerHTML = "";
+
+    if (!data.businesses || data.businesses.length === 0) {
+        list.innerHTML =
+            `<li class="business-list-empty">No businesses registered yet.</li>`;
+        return;
+    }
+
+    data.businesses.forEach(biz => {
+        list.appendChild(createBusinessRow(biz));
+    });
+}
+
+window.onload = async function () {
+    try { await loadBusinesses(); }
+    catch (e) { console.error("Businesses", e); }
+};
+
+</script>
+
+</body>
+</html>
