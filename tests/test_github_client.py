@@ -272,6 +272,28 @@ def test_create_repo_from_template_unexpected_status(monkeypatch):
         assert "Unexpected response" in str(e)
 
 
+def test_create_repo_from_template_invalid_json_on_success(monkeypatch):
+
+    _configure(monkeypatch)
+
+    class BadJsonResponse:
+        status_code = 201
+        text = "not json"
+
+        def json(self):
+            raise ValueError("no JSON object could be decoded")
+
+    monkeypatch.setattr(
+        github_client.requests, "post", lambda *a, **k: BadJsonResponse()
+    )
+
+    try:
+        create_repo_from_template("x")
+        assert False, "expected GitHubProvisioningError"
+    except GitHubProvisioningError as e:
+        assert "wasn't valid JSON" in str(e)
+
+
 def test_create_repo_from_template_network_error(monkeypatch):
 
     _configure(monkeypatch)

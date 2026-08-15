@@ -9,7 +9,7 @@ from config import (
     GROQ_API_KEY,
     OTP_CHANNEL,
 )
-from crm.customer_mapping import update_provisioning_result
+from crm.customer_mapping import update_provisioning_result, get_business
 from provisioning.github_client import (
     create_repo_from_template,
     wait_for_repo_ready,
@@ -91,33 +91,80 @@ def provision_business(user_id: str, business_id: str) -> dict:
 
     repo_name = _repo_name_for_business(business_id)
 
-    try:
-        repo = create_repo_from_template(
-            repo_name,
-            description=f"WhatsPilot business portal for {user_id}",
-        )
-    except GitHubProvisioningError as e:
+    # Retry-after-partial-failure support: repo names are deterministic
+    # (_repo_name_for_business()), so if an earlier attempt already
+    # created the GitHub repo but failed before or during Render service
+    # creation, calling create_repo_from_template() again on retry always
+    # failed with a "name already exists" GitHubProvisioningError - making
+    # retry a dead end for exactly the case it exists to handle. Reuse the
+    # repo already on file for this business (from that earlier attempt's
+    # update_provisioning_result() call) instead of creating a new one.
+    existing_business = get_business(user_id)
+    existing_repo_url = (
+        existing_business.get("github_repo_url")
+        if existing_business else None
+    )
 
-        logger.error(
-            "Provisioning failed for %s at repo creation: %s", user_id, e
+    if existing_repo_url:
+
+        full_name = existing_repo_url.replace(
+            "https://github.com/", ""
+        ).rstrip("/")
+
+        logger.info(
+            "Provisioning %s: reusing existing repo %s from a prior "
+            "attempt instead of creating a new one.",
+            user_id, full_name
         )
 
-        result = {
-            "provisioning_status": "failed",
-            "provisioning_error": f"GitHub: {e}",
-            "github_repo_url": None,
-            "render_service_id": None,
-            "render_service_url": None,
+        repo = {
+            "full_name": full_name,
+            "html_url": existing_repo_url,
         }
-        update_provisioning_result(user_id, **result)
-        return result
 
-    if not wait_for_repo_ready(repo["full_name"]):
-        logger.warning(
-            "Provisioning %s: repo content wasn't confirmed ready in "
-            "time - proceeding anyway, Render's own clone may just "
-            "need a bit longer.",
-            user_id
+    else:
+
+        try:
+            repo = create_repo_from_template(
+                repo_name,
+                description=f"WhatsPilot business portal for {user_id}",
+            )
+        except GitHubProvisioningError as e:
+
+            logger.error(
+                "Provisioning failed for %s at repo creation: %s", user_id, e
+            )
+
+            result = {
+                "provisioning_status": "failed",
+                "provisioning_error": f"GitHub: {e}",
+                "github_repo_url": None,
+                "render_service_id": None,
+                "render_service_url": None,
+            }
+            update_provisioning_result(user_id, **result)
+            return result
+
+    # Deliberately broad: this used to sit outside any try/except, so any
+    # exception here (not just the requests.RequestException
+    # wait_for_repo_ready() already retries past internally - e.g. a bug
+    # in its own response handling) propagated straight out of this
+    # function despite its docstring promising it never raises, leaving
+    # the business stuck at provisioning_status='pending' forever and
+    # returning an unhandled 500 to the admin UI instead of a clear
+    # failure message.
+    try:
+        if not wait_for_repo_ready(repo["full_name"]):
+            logger.warning(
+                "Provisioning %s: repo content wasn't confirmed ready in "
+                "time - proceeding anyway, Render's own clone may just "
+                "need a bit longer.",
+                user_id
+            )
+    except Exception as e:
+        logger.exception(
+            "Provisioning %s: unexpected error while waiting for repo "
+            "content to be ready - proceeding anyway: %s", user_id, e
         )
 
     try:

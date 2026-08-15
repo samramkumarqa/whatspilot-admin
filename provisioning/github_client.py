@@ -95,7 +95,16 @@ def create_repo_from_template(
 
     if response.status_code == 201:
 
-        body = response.json()
+        # A 201 with a non-JSON body would otherwise crash with an
+        # unhandled ValueError here instead of the clear
+        # GitHubProvisioningError callers expect from this function.
+        try:
+            body = response.json()
+        except ValueError as e:
+            raise GitHubProvisioningError(
+                f"GitHub returned a 201 creating repo '{repo_name}' but "
+                f"the response body wasn't valid JSON: {e}"
+            ) from e
 
         return {
             "full_name": body.get("full_name"),

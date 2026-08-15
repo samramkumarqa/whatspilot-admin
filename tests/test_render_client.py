@@ -266,6 +266,52 @@ def test_create_web_service_unexpected_status(monkeypatch):
         assert "Unexpected response" in str(e)
 
 
+def test_create_web_service_missing_id_in_response(monkeypatch):
+    """
+    A 201 whose body doesn't include a service id used to slip through
+    as a "successful" result with id=None - the caller
+    (provisioning/orchestrator.py) would then record
+    provisioning_status="live" with render_service_id set to None,
+    reporting a working deployment that doesn't actually exist.
+    """
+
+    _configure(monkeypatch)
+
+    monkeypatch.setattr(
+        render_client.requests,
+        "post",
+        lambda *a, **k: FakeResponse(201, {"service": {"name": "x"}}),
+    )
+
+    try:
+        create_web_service("x", "https://github.com/samramkumarqa/x", env_vars=[])
+        assert False, "expected RenderProvisioningError"
+    except RenderProvisioningError as e:
+        assert "didn't include a service id" in str(e)
+
+
+def test_create_web_service_invalid_json_on_success(monkeypatch):
+
+    _configure(monkeypatch)
+
+    class BadJsonResponse:
+        status_code = 201
+        text = "not json"
+
+        def json(self):
+            raise ValueError("no JSON object could be decoded")
+
+    monkeypatch.setattr(
+        render_client.requests, "post", lambda *a, **k: BadJsonResponse()
+    )
+
+    try:
+        create_web_service("x", "https://github.com/samramkumarqa/x", env_vars=[])
+        assert False, "expected RenderProvisioningError"
+    except RenderProvisioningError as e:
+        assert "wasn't valid JSON" in str(e)
+
+
 def test_create_web_service_network_error(monkeypatch):
 
     _configure(monkeypatch)

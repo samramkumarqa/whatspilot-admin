@@ -1,3 +1,5 @@
+import psycopg2
+
 from database.db import get_crm_connection
 
 def init_customer_mapping():
@@ -309,14 +311,25 @@ def get_business(user_id: str):
     fields - used by the provisioning retry route (see
     api/businesses.py's POST /business-registry/{user_id}/provision) to
     look up the business_id an existing registration already has,
-    without needing the caller to pass it separately.
+    without needing the caller to pass it separately. Also exposes
+    github_repo_url/provisioning_status so provision_business() (see
+    provisioning/orchestrator.py) can detect a prior partial failure -
+    a repo that already exists from an earlier attempt - and skip
+    straight to Render service creation on retry instead of unconditionally
+    trying to create the same repo again.
     """
 
     conn = get_crm_connection()
 
     row = conn.execute(
         """
-        SELECT user_id, whatsapp_number, business_id, status
+        SELECT
+            user_id,
+            whatsapp_number,
+            business_id,
+            status,
+            provisioning_status,
+            github_repo_url
         FROM customer_numbers
         WHERE user_id = ?
         """,
@@ -333,6 +346,8 @@ def get_business(user_id: str):
         "whatsapp_number": row[1],
         "business_id": row[2],
         "status": row[3],
+        "provisioning_status": row[4],
+        "github_repo_url": row[5],
     }
 
 
@@ -476,54 +491,102 @@ def register_business(
     Returns None if user_id is already registered - the caller (see
     api/businesses.py) turns that into a 409 rather than silently
     overwriting an existing business's row.
+
+    Two concurrency issues used to exist here, both surfaced only under
+    real concurrent "Add Business" clicks (two admins, or one admin
+    double-clicking):
+
+    1. business_id collision: _generate_business_id() reads the current
+       highest business_NNN under READ COMMITTED, with no locking. Two
+       concurrent calls could both read the same "highest" value before
+       either committed its INSERT, and both generate and insert the
+       *same* business_id - silently, since business_id has no unique
+       constraint. That's a real data-integrity risk: business_id scopes
+       every other table (automation_rules, customer_mapping, etc.), so
+       two live deployments sharing one business_id would read/write
+       each other's data. Fixed with pg_advisory_xact_lock() below,
+       which serializes register_business() calls against each other
+       for just the handful of milliseconds this function takes - it's
+       released automatically on commit/rollback, so it never risks
+       being left locked.
+
+    2. Connection leak + unhandled 500: any exception after
+       get_crm_connection() (including a concurrent duplicate user_id
+       insert racing past the existence check before either side
+       committed, which raises a psycopg2 IntegrityError on user_id's
+       PRIMARY KEY constraint) used to skip conn.close() entirely,
+       permanently checking out a connection from the pool, and
+       propagated as an unhandled 500 instead of the same "already
+       registered" None result a non-concurrent duplicate call gets.
+       Fixed with try/except/finally: an IntegrityError is now treated
+       identically to the upfront existence check finding a row, and the
+       connection is always returned to the pool.
     """
 
     conn = get_crm_connection()
 
-    # register_business() still needs an upfront existence check (unlike
-    # set_business_status()/delete_business() below) - it has to know
-    # *before* generating a business_id whether this is a genuinely new
-    # business, since an UPDATE/INSERT-based rowcount check can't tell
-    # "already registered" apart from "just inserted".
-    existing = conn.execute(
-        "SELECT 1 FROM customer_numbers WHERE user_id = ?",
-        (user_id,)
-    ).fetchone()
+    try:
+        # Serializes business_id generation across concurrent calls -
+        # see point 1 above. Scoped to this transaction only; released
+        # automatically on the commit()/rollback() below.
+        conn.execute(
+            "SELECT pg_advisory_xact_lock(hashtext("
+            "'whatspilot_register_business'))"
+        )
 
-    if existing:
-        conn.close()
+        # register_business() still needs an upfront existence check
+        # (unlike set_business_status()/delete_business() below) - it
+        # has to know *before* generating a business_id whether this is
+        # a genuinely new business, since an UPDATE/INSERT-based
+        # rowcount check can't tell "already registered" apart from
+        # "just inserted".
+        existing = conn.execute(
+            "SELECT 1 FROM customer_numbers WHERE user_id = ?",
+            (user_id,)
+        ).fetchone()
+
+        if existing:
+            conn.rollback()
+            return None
+
+        business_id = _generate_business_id(conn)
+
+        # provisioning_status starts 'pending' (not NULL) specifically
+        # for rows created through this function - see
+        # update_provisioning_result() and provisioning/orchestrator.py,
+        # which is expected to flip this to 'live' or 'failed'
+        # immediately afterward (see api/businesses.py's
+        # create_business()). If that update never happens (an
+        # unhandled crash, not just a normal API failure -
+        # orchestrator.py's own try/except already covers the expected
+        # failure paths), 'pending' sticking around is itself a visible
+        # signal something went wrong, rather than looking identical to
+        # a pre-pipeline manual business.
+        conn.execute(
+            """
+            INSERT INTO customer_numbers
+            (user_id, whatsapp_number, business_id, status, owner_whatsapp_number, provisioning_status)
+            VALUES (?, ?, ?, 'inactive', ?, 'pending')
+            """,
+            (user_id, whatsapp_number, business_id, owner_whatsapp_number)
+        )
+
+        conn.commit()
+
+        return {
+            "user_id": user_id,
+            "whatsapp_number": whatsapp_number,
+            "business_id": business_id,
+            "status": "inactive",
+            "owner_whatsapp_number": owner_whatsapp_number,
+        }
+
+    except psycopg2.IntegrityError:
+        conn.rollback()
         return None
 
-    business_id = _generate_business_id(conn)
-
-    # provisioning_status starts 'pending' (not NULL) specifically for
-    # rows created through this function - see update_provisioning_result()
-    # and provisioning/orchestrator.py, which is expected to flip this to
-    # 'live' or 'failed' immediately afterward (see api/businesses.py's
-    # create_business()). If that update never happens (an unhandled
-    # crash, not just a normal API failure - orchestrator.py's own
-    # try/except already covers the expected failure paths), 'pending'
-    # sticking around is itself a visible signal something went wrong,
-    # rather than looking identical to a pre-pipeline manual business.
-    conn.execute(
-        """
-        INSERT INTO customer_numbers
-        (user_id, whatsapp_number, business_id, status, owner_whatsapp_number, provisioning_status)
-        VALUES (?, ?, ?, 'inactive', ?, 'pending')
-        """,
-        (user_id, whatsapp_number, business_id, owner_whatsapp_number)
-    )
-
-    conn.commit()
-    conn.close()
-
-    return {
-        "user_id": user_id,
-        "whatsapp_number": whatsapp_number,
-        "business_id": business_id,
-        "status": "inactive",
-        "owner_whatsapp_number": owner_whatsapp_number,
-    }
+    finally:
+        conn.close()
 
 
 def set_business_status(user_id: str, status: str):

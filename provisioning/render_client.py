@@ -117,16 +117,38 @@ def create_web_service(
 
     if response.status_code == 201:
 
-        body = response.json()
+        # A 201 with a body that doesn't decode as JSON, or that decodes
+        # but is missing the fields this app actually relies on (chiefly
+        # `id` - used everywhere downstream as the service identifier),
+        # used to slip through as a "successful" result with those fields
+        # silently None. The caller (provisioning/orchestrator.py) would
+        # then record provisioning_status="live" with render_service_id
+        # set to None - reported as a working deployment when it wasn't.
+        try:
+            body = response.json()
+        except ValueError as e:
+            raise RenderProvisioningError(
+                f"Render returned a 201 for service '{name}' but the "
+                f"response body wasn't valid JSON: {e}"
+            ) from e
+
         service = body.get("service", {})
 
-        return {
+        result = {
             "id": service.get("id"),
             "name": service.get("name"),
             "dashboard_url": service.get("dashboardUrl"),
             "url": service.get("serviceDetails", {}).get("url"),
             "deploy_id": body.get("deployId"),
         }
+
+        if not result["id"]:
+            raise RenderProvisioningError(
+                f"Render returned a 201 for service '{name}' but the "
+                f"response didn't include a service id: {body}"
+            )
+
+        return result
 
     # -----------------------------
     # Known failure modes - surfaced with a specific, actionable message

@@ -217,3 +217,82 @@ def test_provision_business_never_raises_on_failure(isolated_db, monkeypatch):
     # rather than a 500.
     result = orchestrator.provision_business("u1", "business_001")
     assert isinstance(result, dict)
+
+
+def test_provision_business_retry_reuses_existing_repo(isolated_db, monkeypatch):
+    """
+    Retry-after-partial-failure: if a prior attempt already created the
+    GitHub repo (recorded via update_provisioning_result()) but failed at
+    the Render step, a retry should NOT call create_repo_from_template()
+    again - repo names are deterministic
+    (_repo_name_for_business()), so that used to always fail with a
+    "name already exists" GitHubProvisioningError and made retry a dead
+    end. It should instead reuse the repo URL already on file and go
+    straight to Render.
+    """
+
+    register_business("u1", "+14155550000")
+
+    # Simulate a prior failed attempt that got as far as creating the repo.
+    from crm.customer_mapping import update_provisioning_result
+    update_provisioning_result(
+        "u1",
+        provisioning_status="failed",
+        provisioning_error="Render: payment information required",
+        github_repo_url=FAKE_REPO["html_url"],
+        render_service_id=None,
+        render_service_url=None,
+    )
+
+    def fake_create_repo(*a, **k):
+        raise AssertionError(
+            "should not call create_repo_from_template() again when a "
+            "repo already exists from a prior attempt"
+        )
+
+    monkeypatch.setattr(orchestrator, "create_repo_from_template", fake_create_repo)
+    monkeypatch.setattr(orchestrator, "wait_for_repo_ready", lambda *a, **k: True)
+
+    captured = {}
+
+    def fake_create_service(name, repo_url, env_vars):
+        captured["repo_url"] = repo_url
+        return FAKE_SERVICE
+
+    monkeypatch.setattr(orchestrator, "create_web_service", fake_create_service)
+
+    result = orchestrator.provision_business("u1", "business_001")
+
+    assert result["provisioning_status"] == "live"
+    assert result["github_repo_url"] == FAKE_REPO["html_url"]
+    assert captured["repo_url"] == FAKE_REPO["html_url"]
+
+
+def test_provision_business_survives_wait_for_repo_ready_raising(isolated_db, monkeypatch):
+    """
+    wait_for_repo_ready() used to be called outside any try/except in
+    provision_business() - an unexpected exception there (not just the
+    requests.RequestException it already retries past internally) would
+    propagate out of this function despite its docstring promising it
+    never raises, leaving the business stuck at provisioning_status=
+    'pending' and returning an unhandled 500 to the admin UI. Provisioning
+    should still complete (with a warning logged) instead.
+    """
+
+    register_business("u1", "+14155550000")
+
+    monkeypatch.setattr(
+        orchestrator, "create_repo_from_template", lambda *a, **k: FAKE_REPO
+    )
+
+    def fake_wait(*a, **k):
+        raise RuntimeError("unexpected bug in wait_for_repo_ready")
+
+    monkeypatch.setattr(orchestrator, "wait_for_repo_ready", fake_wait)
+    monkeypatch.setattr(
+        orchestrator, "create_web_service", lambda *a, **k: FAKE_SERVICE
+    )
+
+    result = orchestrator.provision_business("u1", "business_001")
+
+    assert result["provisioning_status"] == "live"

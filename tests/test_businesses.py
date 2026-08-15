@@ -60,6 +60,30 @@ def test_register_business_rejects_duplicate_user_id(isolated_db):
     assert result is None
 
 
+def test_register_business_does_not_leak_connections(isolated_db):
+    """
+    register_business() now wraps its body in try/except/finally so
+    conn.close() always runs, including on the duplicate-user_id path and
+    on any IntegrityError raised by a concurrent duplicate insert slipping
+    past the upfront existence check (see the pg_advisory_xact_lock /
+    try-except-finally in crm/customer_mapping.py). This can't be
+    exercised with genuine concurrent connections against the PGlite test
+    database (it only supports one live connection at a time), so this
+    test instead proves there's no leak the more direct way: call it many
+    more times than database/db.py's connection pool size (_POOL_MAX=10),
+    mixing successful and duplicate-rejected calls - a leak would exhaust
+    the pool and this would hang or raise well before 25 calls.
+    """
+
+    for i in range(25):
+        register_business(f"leak-check-{i}", f"+1415555{i:04d}")
+        # Immediately re-register the same user_id - takes the duplicate
+        # early-return path, which also has to close its connection.
+        assert register_business(f"leak-check-{i}", f"+1415555{i:04d}") is None
+
+    assert len(list_businesses()) == 25
+
+
 def test_newly_registered_business_excluded_from_active_businesses(isolated_db):
     register_business("u1", "+14155550000")
 
