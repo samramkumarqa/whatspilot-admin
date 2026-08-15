@@ -143,6 +143,36 @@ def test_create_repo_from_template_name_collision(monkeypatch):
         assert "already exists" in str(e)
 
 
+def test_create_repo_from_template_name_collision_string_shaped_errors(monkeypatch):
+    """
+    GitHub's real API returns `errors` as a list of plain strings for
+    this particular validation failure (confirmed live) - not the
+    {"message": ...} object shape the dict-based test above uses for a
+    different kind of 422. Both shapes appear in practice, so both need
+    to work.
+    """
+
+    _configure(monkeypatch)
+
+    monkeypatch.setattr(
+        github_client.requests,
+        "post",
+        lambda *a, **k: FakeResponse(
+            422,
+            {
+                "message": "Repository creation failed.",
+                "errors": ["name already exists on this account"],
+            },
+        ),
+    )
+
+    try:
+        create_repo_from_template("whatspilot-business_002")
+        assert False, "expected GitHubProvisioningError"
+    except GitHubProvisioningError as e:
+        assert "already exists" in str(e)
+
+
 def test_create_repo_from_template_other_422(monkeypatch):
 
     _configure(monkeypatch)
@@ -161,6 +191,27 @@ def test_create_repo_from_template_other_422(monkeypatch):
         assert False, "expected GitHubProvisioningError"
     except GitHubProvisioningError as e:
         assert "rejected the repo creation request" in str(e)
+
+
+def test_create_repo_from_template_other_422_string_shaped_errors(monkeypatch):
+
+    _configure(monkeypatch)
+
+    monkeypatch.setattr(
+        github_client.requests,
+        "post",
+        lambda *a, **k: FakeResponse(
+            422,
+            {"message": "Validation Failed", "errors": ["invalid field 'name'"]},
+        ),
+    )
+
+    try:
+        create_repo_from_template("bad name")
+        assert False, "expected GitHubProvisioningError"
+    except GitHubProvisioningError as e:
+        assert "rejected the repo creation request" in str(e)
+        assert "invalid field" in str(e)
 
 
 def test_create_repo_from_template_401(monkeypatch):

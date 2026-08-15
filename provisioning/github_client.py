@@ -130,12 +130,25 @@ def create_repo_from_template(
 
     if response.status_code == 422:
 
-        errors = response.json().get("errors", [])
+        # GitHub's `errors` array isn't consistently shaped - some
+        # validation failures (including "name already exists", the
+        # common case here) come back as plain strings, others as
+        # {"resource", "field", "code", "message"} objects. Handling
+        # only the dict shape crashed with AttributeError the first
+        # time a real string-shaped error came through.
+        body = response.json()
+        errors = body.get("errors", [])
 
-        if any(
-            "already exists" in err.get("message", "").lower()
-            for err in errors
-        ):
+        def _error_text(err):
+            if isinstance(err, str):
+                return err
+            if isinstance(err, dict):
+                return err.get("message", "")
+            return str(err)
+
+        error_texts = [_error_text(err) for err in errors]
+
+        if any("already exists" in text.lower() for text in error_texts):
             raise GitHubProvisioningError(
                 f"A repo named '{repo_name}' already exists under "
                 f"'{GITHUB_OWNER}' - choose a different name or remove "
@@ -144,7 +157,7 @@ def create_repo_from_template(
 
         raise GitHubProvisioningError(
             f"GitHub rejected the repo creation request: "
-            f"{errors or response.text}"
+            f"{'; '.join(t for t in error_texts if t) or body.get('message') or response.text}"
         )
 
     raise GitHubProvisioningError(
