@@ -47,3 +47,26 @@ GITHUB_OWNER = os.getenv("GITHUB_OWNER")
 GITHUB_TEMPLATE_REPO = os.getenv("GITHUB_TEMPLATE_REPO", "whatspilot-business-template")
 RENDER_API_KEY = os.getenv("RENDER_API_KEY")
 RENDER_OWNER_ID = os.getenv("RENDER_OWNER_ID")
+
+# Same shared Postgres instance every business-portal deployment also
+# connects to (see provisioning/orchestrator.py, which forwards this
+# value as the new deployment's own DATABASE_URL) - not otherwise used
+# by this app itself, which reaches the database through
+# database/db.py's own separate os.getenv() read of the same variable.
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+# Shared across every provisioned business-portal deployment for now -
+# one Twilio WhatsApp Sandbox number and one Groq account serve every
+# customer, same as the two businesses set up manually before this
+# pipeline existed. Giving each customer their own WhatsApp Business
+# API number is a largely manual, Twilio-side approval process this
+# pipeline doesn't attempt to automate - revisit if/when that becomes a
+# real requirement, at which point these would need to move from
+# "shared config the admin app forwards" to "collected per-business at
+# registration time" instead.
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_VERIFY_SERVICE_SID = os.getenv("TWILIO_VERIFY_SERVICE_SID")
+TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+OTP_CHANNEL = os.getenv("OTP_CHANNEL", "sms")

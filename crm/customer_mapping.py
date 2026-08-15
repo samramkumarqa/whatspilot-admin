@@ -63,6 +63,38 @@ def init_customer_mapping():
             "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
         )
 
+    # Automated provisioning (see provisioning/orchestrator.py) - tracks
+    # the outcome of spinning up this business's own GitHub repo +
+    # Render deployment when it's registered. NULL in all five columns
+    # means "never went through this pipeline" (every business
+    # registered before this migration, set up manually) rather than
+    # "pending" - the Businesses page treats those two states
+    # differently (blank vs an actual status badge).
+    if "provisioning_status" not in existing_business_columns:
+        conn.execute(
+            "ALTER TABLE customer_numbers ADD COLUMN provisioning_status TEXT"
+        )
+
+    if "provisioning_error" not in existing_business_columns:
+        conn.execute(
+            "ALTER TABLE customer_numbers ADD COLUMN provisioning_error TEXT"
+        )
+
+    if "github_repo_url" not in existing_business_columns:
+        conn.execute(
+            "ALTER TABLE customer_numbers ADD COLUMN github_repo_url TEXT"
+        )
+
+    if "render_service_id" not in existing_business_columns:
+        conn.execute(
+            "ALTER TABLE customer_numbers ADD COLUMN render_service_id TEXT"
+        )
+
+    if "render_service_url" not in existing_business_columns:
+        conn.execute(
+            "ALTER TABLE customer_numbers ADD COLUMN render_service_url TEXT"
+        )
+
     # Customer → Business mapping table
     conn.execute("""
         CREATE TABLE IF NOT EXISTS customer_mapping (
@@ -240,7 +272,12 @@ def list_businesses():
             business_id,
             status,
             owner_whatsapp_number,
-            created_at
+            created_at,
+            provisioning_status,
+            provisioning_error,
+            github_repo_url,
+            render_service_id,
+            render_service_url
         FROM customer_numbers
         ORDER BY created_at DESC
         """
@@ -256,9 +293,89 @@ def list_businesses():
             "status": row[3],
             "owner_whatsapp_number": row[4],
             "created_at": row[5],
+            "provisioning_status": row[6],
+            "provisioning_error": row[7],
+            "github_repo_url": row[8],
+            "render_service_id": row[9],
+            "render_service_url": row[10],
         }
         for row in rows
     ]
+
+
+def get_business(user_id: str):
+    """
+    A single business's full registry row, including provisioning
+    fields - used by the provisioning retry route (see
+    api/businesses.py's POST /business-registry/{user_id}/provision) to
+    look up the business_id an existing registration already has,
+    without needing the caller to pass it separately.
+    """
+
+    conn = get_crm_connection()
+
+    row = conn.execute(
+        """
+        SELECT user_id, whatsapp_number, business_id, status
+        FROM customer_numbers
+        WHERE user_id = ?
+        """,
+        (user_id,)
+    ).fetchone()
+
+    conn.close()
+
+    if not row:
+        return None
+
+    return {
+        "user_id": row[0],
+        "whatsapp_number": row[1],
+        "business_id": row[2],
+        "status": row[3],
+    }
+
+
+def update_provisioning_result(
+    user_id: str,
+    provisioning_status: str,
+    provisioning_error: str = None,
+    github_repo_url: str = None,
+    render_service_id: str = None,
+    render_service_url: str = None,
+):
+    """
+    Records the outcome of provisioning/orchestrator.py's
+    provision_business() on a business's row - called once at the end
+    of every provisioning attempt, success or failure, so the Businesses
+    page always has something concrete to show rather than a
+    permanently stuck "pending" if the process fails partway through.
+    """
+
+    conn = get_crm_connection()
+
+    conn.execute(
+        """
+        UPDATE customer_numbers
+        SET provisioning_status = ?,
+            provisioning_error = ?,
+            github_repo_url = ?,
+            render_service_id = ?,
+            render_service_url = ?
+        WHERE user_id = ?
+        """,
+        (
+            provisioning_status,
+            provisioning_error,
+            github_repo_url,
+            render_service_id,
+            render_service_url,
+            user_id,
+        )
+    )
+
+    conn.commit()
+    conn.close()
 
 
 def get_business_by_login_number(phone: str):
@@ -379,11 +496,20 @@ def register_business(
 
     business_id = _generate_business_id(conn)
 
+    # provisioning_status starts 'pending' (not NULL) specifically for
+    # rows created through this function - see update_provisioning_result()
+    # and provisioning/orchestrator.py, which is expected to flip this to
+    # 'live' or 'failed' immediately afterward (see api/businesses.py's
+    # create_business()). If that update never happens (an unhandled
+    # crash, not just a normal API failure - orchestrator.py's own
+    # try/except already covers the expected failure paths), 'pending'
+    # sticking around is itself a visible signal something went wrong,
+    # rather than looking identical to a pre-pipeline manual business.
     conn.execute(
         """
         INSERT INTO customer_numbers
-        (user_id, whatsapp_number, business_id, status, owner_whatsapp_number)
-        VALUES (?, ?, ?, 'inactive', ?)
+        (user_id, whatsapp_number, business_id, status, owner_whatsapp_number, provisioning_status)
+        VALUES (?, ?, ?, 'inactive', ?, 'pending')
         """,
         (user_id, whatsapp_number, business_id, owner_whatsapp_number)
     )

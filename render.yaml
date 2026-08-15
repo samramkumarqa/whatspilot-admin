@@ -42,3 +42,18 @@ services:
         sync: false
       - key: RENDER_OWNER_ID
         sync: false
+      # Shared across every provisioned business-portal deployment - see
+      # config.py's comment on these same variables for why they're
+      # shared rather than collected per-business.
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_VERIFY_SERVICE_SID
+        sync: false
+      - key: TWILIO_WHATSAPP_NUMBER
+        sync: false
+      - key: OTP_CHANNEL
+        value: sms
+      - key: GROQ_API_KEY
+        sync: false

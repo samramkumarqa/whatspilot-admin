@@ -18,6 +18,7 @@ from crm.customer_mapping import (
     list_businesses,
     get_active_businesses,
     get_business_id,
+    get_business,
     get_business_by_login_number,
     get_owning_business_user_id,
     save_mapping,
@@ -27,6 +28,7 @@ from api.businesses import (
     create_business,
     update_business_status,
     remove_business,
+    provision_business_route,
     RegisterBusinessRequest,
     UpdateBusinessStatusRequest,
 )
@@ -182,6 +184,123 @@ def test_remove_business_route_deletes(isolated_db):
 
     assert result["status"] == "success"
     assert list_businesses() == []
+
+
+def test_create_business_route_merges_provisioning_result(isolated_db, monkeypatch):
+    """
+    api/businesses.py's create_business() calls provision_business()
+    right after registering - here it's mocked so the test doesn't
+    depend on real GitHub/Render credentials being configured (see
+    test_orchestrator.py for coverage of provision_business() itself).
+    """
+
+    import api.businesses as businesses_module
+
+    monkeypatch.setattr(
+        businesses_module,
+        "provision_business",
+        lambda user_id, business_id: {
+            "provisioning_status": "live",
+            "provisioning_error": None,
+            "github_repo_url": "https://github.com/samramkumarqa/whatspilot-business_001",
+            "render_service_id": "srv-abc123",
+            "render_service_url": "https://whatspilot-business_001.onrender.com",
+        }
+    )
+
+    result = asyncio.run(create_business(
+        RegisterBusinessRequest(user_id="u1", whatsapp_number="+14155550000")
+    ))
+
+    assert result["business"]["provisioning_status"] == "live"
+    assert result["business"]["render_service_url"] == "https://whatspilot-business_001.onrender.com"
+
+
+def test_create_business_route_registers_even_if_provisioning_fails(isolated_db, monkeypatch):
+
+    import api.businesses as businesses_module
+
+    monkeypatch.setattr(
+        businesses_module,
+        "provision_business",
+        lambda user_id, business_id: {
+            "provisioning_status": "failed",
+            "provisioning_error": "GitHub: something went wrong",
+            "github_repo_url": None,
+            "render_service_id": None,
+            "render_service_url": None,
+        }
+    )
+
+    result = asyncio.run(create_business(
+        RegisterBusinessRequest(user_id="u1", whatsapp_number="+14155550000")
+    ))
+
+    # The registration itself still succeeds - a provisioning failure is
+    # reported, not raised as an HTTP error.
+    assert result["status"] == "success"
+    assert result["business"]["business_id"] == "business_001"
+    assert result["business"]["provisioning_status"] == "failed"
+
+    # And the business is genuinely in the registry, retry-able later.
+    assert list_businesses()[0]["user_id"] == "u1"
+
+
+def test_provision_business_route_404s_for_unknown_user(isolated_db):
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(provision_business_route("ghost"))
+
+    assert exc_info.value.status_code == 404
+
+
+def test_provision_business_route_retries_and_returns_result(isolated_db, monkeypatch):
+
+    import api.businesses as businesses_module
+
+    monkeypatch.setattr(
+        businesses_module, "provision_business",
+        lambda user_id, business_id: {
+            "provisioning_status": "failed",
+            "provisioning_error": "boom",
+            "github_repo_url": None,
+            "render_service_id": None,
+            "render_service_url": None,
+        }
+    )
+
+    asyncio.run(create_business(
+        RegisterBusinessRequest(user_id="u1", whatsapp_number="+14155550000")
+    ))
+
+    monkeypatch.setattr(
+        businesses_module, "provision_business",
+        lambda user_id, business_id: {
+            "provisioning_status": "live",
+            "provisioning_error": None,
+            "github_repo_url": "https://github.com/samramkumarqa/whatspilot-business_001",
+            "render_service_id": "srv-abc123",
+            "render_service_url": "https://whatspilot-business_001.onrender.com",
+        }
+    )
+
+    result = asyncio.run(provision_business_route("u1"))
+
+    assert result["status"] == "success"
+    assert result["provisioning"]["provisioning_status"] == "live"
+
+
+def test_get_business_returns_row(isolated_db):
+    register_business("u1", "+14155550000")
+
+    business = get_business("u1")
+
+    assert business["user_id"] == "u1"
+    assert business["business_id"] == "business_001"
+    assert business["status"] == "inactive"
+
+
+def test_get_business_returns_none_for_unknown_user(isolated_db):
+    assert get_business("ghost") is None
 
 
 def test_get_businesses_route_lists_all(isolated_db):

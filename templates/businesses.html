@@ -313,6 +313,63 @@ input.field-invalid {
   font-size: 14px;
 }
 
+/* PROVISIONING */
+
+.provisioning-row {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.provisioning-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-right: 8px;
+}
+
+.provisioning-badge.live {
+  background: var(--color-success-light);
+  color: var(--color-success-dark);
+}
+
+.provisioning-badge.pending,
+.provisioning-badge.provisioning {
+  background: var(--color-warning-light);
+  color: var(--color-warning-dark);
+}
+
+.provisioning-badge.failed {
+  background: var(--color-danger-light);
+  color: var(--color-danger-dark);
+}
+
+.provisioning-links a {
+  color: var(--color-primary);
+  text-decoration: none;
+  margin-right: 10px;
+}
+
+.provisioning-links a:hover {
+  text-decoration: underline;
+}
+
+.provisioning-error {
+  margin-top: 4px;
+  color: var(--color-danger-dark);
+  word-break: break-word;
+}
+
+.retry-btn {
+  background: var(--color-warning);
+}
+
+.retry-btn:hover {
+  background: var(--color-warning-dark);
+}
+
 /* COLLAPSIBLE HELP BLOCK */
 
 .help-details {
@@ -598,8 +655,19 @@ async function registerBusiness() {
             return;
         }
 
-        document.getElementById("registerStatus").innerText =
-            `✅ ${data.business.business_id} registered - click Activate when ready.`;
+        const biz = data.business;
+
+        if (biz.provisioning_status === "live") {
+            document.getElementById("registerStatus").innerText =
+                `✅ ${biz.business_id} registered and its portal is live - click Activate when ready.`;
+        } else if (biz.provisioning_status === "failed") {
+            document.getElementById("registerStatus").innerText =
+                `⚠️ ${biz.business_id} registered, but automatic provisioning failed ` +
+                `(${biz.provisioning_error || "unknown error"}) - see below to retry.`;
+        } else {
+            document.getElementById("registerStatus").innerText =
+                `✅ ${biz.business_id} registered - click Activate when ready.`;
+        }
 
         document.getElementById("bizWhatsappNumber").value = "";
         document.getElementById("bizUserId").value = "";
@@ -635,6 +703,23 @@ async function setBusinessStatus(userId, status) {
     await loadBusinesses();
 }
 
+async function retryProvisioning(userId) {
+
+    const response = await fetch(
+        `/business-registry/${encodeURIComponent(userId)}/provision`,
+        { method: "POST" }
+    );
+
+    const data = await response.json();
+
+    if (data.status !== "success") {
+        alert(`❌ ${data.detail || "Failed to retry provisioning."}`);
+        return;
+    }
+
+    await loadBusinesses();
+}
+
 async function deleteBusinessRow(userId) {
 
     if (!confirm(
@@ -658,6 +743,49 @@ async function deleteBusinessRow(userId) {
     await loadBusinesses();
 }
 
+// Renders the automated-provisioning status line under a business row -
+// blank for businesses set up before this pipeline existed (NULL
+// provisioning_status, see crm/customer_mapping.py's init migration),
+// otherwise a status badge plus whatever links/error make sense for
+// that status.
+function provisioningRowHtml(biz) {
+
+    if (!biz.provisioning_status) return "";
+
+    const labels = {
+        live: "Portal Live",
+        pending: "Setup Pending",
+        provisioning: "Setting Up...",
+        failed: "Setup Failed",
+    };
+
+    const label = labels[biz.provisioning_status] || biz.provisioning_status;
+
+    let links = "";
+    if (biz.github_repo_url || biz.render_service_url) {
+        links = `<div class="provisioning-links">` +
+            (biz.github_repo_url
+                ? `<a href="${escapeHtml(biz.github_repo_url)}" target="_blank" rel="noopener">Repo</a>`
+                : "") +
+            (biz.render_service_url
+                ? `<a href="${escapeHtml(biz.render_service_url)}" target="_blank" rel="noopener">Live Portal</a>`
+                : "") +
+            `</div>`;
+    }
+
+    const error = biz.provisioning_error
+        ? `<div class="provisioning-error">${escapeHtml(biz.provisioning_error)}</div>`
+        : "";
+
+    return `
+        <div class="provisioning-row">
+            <span class="provisioning-badge ${escapeHtml(biz.provisioning_status)}">${label}</span>
+            ${links}
+            ${error}
+        </div>
+    `;
+}
+
 function createBusinessRow(biz) {
 
     const li = document.createElement("li");
@@ -677,6 +805,7 @@ function createBusinessRow(biz) {
                     ? ` · Owner: ${escapeHtml(biz.owner_whatsapp_number)}`
                     : ""}
             </div>
+            ${provisioningRowHtml(biz)}
         </div>
         <div class="business-status-badge ${isActive ? "active" : "inactive"}">
             ${isActive ? "Active" : "Inactive"}
@@ -685,6 +814,14 @@ function createBusinessRow(biz) {
     `;
 
     const actions = li.querySelector(".business-actions");
+
+    if (biz.provisioning_status === "failed" || biz.provisioning_status === "pending") {
+        const retryBtn = document.createElement("button");
+        retryBtn.className = "retry-btn";
+        retryBtn.textContent = "Retry Setup";
+        retryBtn.onclick = () => retryProvisioning(biz.user_id);
+        actions.appendChild(retryBtn);
+    }
 
     // Only active businesses have a working dashboard to view - the
     // admin picks which business's dashboard/analytics/settings pages

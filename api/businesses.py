@@ -9,7 +9,9 @@ from crm.customer_mapping import (
     register_business,
     set_business_status,
     delete_business,
+    get_business,
 )
+from provisioning.orchestrator import provision_business
 
 router = APIRouter(tags=["Businesses"])
 
@@ -90,11 +92,53 @@ async def create_business(request: RegisterBusinessRequest):
             detail=f"user_id {request.user_id!r} is already registered."
         )
 
+    # Automatically spins up this business's own GitHub repo + Render
+    # deployment (see provisioning/orchestrator.py) - the registration
+    # above has already succeeded and committed at this point, so a
+    # provisioning failure here is reported back in the response (via
+    # the merged-in provisioning_status/provisioning_error fields) but
+    # does NOT roll back or fail this request; the business still
+    # exists in the registry and can be retried from the Businesses
+    # page (see provision_business_route() below).
+    provisioning = await run_in_threadpool(
+        provision_business, request.user_id, result["business_id"]
+    )
+    result.update(provisioning)
+
     return {
 
         "status": "success",
 
         "business": result
+
+    }
+
+
+# --------------------------------------------------------
+# Retry Provisioning
+# --------------------------------------------------------
+
+@router.post("/business-registry/{user_id}/provision")
+async def provision_business_route(user_id: str):
+
+    business = await run_in_threadpool(get_business, user_id)
+
+    if not business:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Business not found"
+        )
+
+    provisioning = await run_in_threadpool(
+        provision_business, user_id, business["business_id"]
+    )
+
+    return {
+
+        "status": "success",
+
+        "provisioning": provisioning
 
     }
 
