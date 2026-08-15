@@ -703,21 +703,40 @@ async function setBusinessStatus(userId, status) {
     await loadBusinesses();
 }
 
-async function retryProvisioning(userId) {
+// Takes the clicked button itself so it can show a loading state - the
+// underlying request takes ~15-20 seconds (real GitHub + Render API
+// calls, see provisioning/orchestrator.py), and with no feedback during
+// that wait the button just looks unresponsive/broken.
+async function retryProvisioning(userId, button) {
 
-    const response = await fetch(
-        `/business-registry/${encodeURIComponent(userId)}/provision`,
-        { method: "POST" }
-    );
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = "Retrying...";
 
-    const data = await response.json();
+    try {
 
-    if (data.status !== "success") {
-        alert(`❌ ${data.detail || "Failed to retry provisioning."}`);
-        return;
+        const response = await fetch(
+            `/business-registry/${encodeURIComponent(userId)}/provision`,
+            { method: "POST" }
+        );
+
+        const data = await response.json();
+
+        if (data.status !== "success") {
+            alert(`❌ ${data.detail || "Failed to retry provisioning."}`);
+            return;
+        }
+
+        await loadBusinesses();
+
+    } catch (e) {
+        alert(`❌ Retry failed: ${e.message}`);
+    } finally {
+        // Only reset if this exact button is still in the DOM - a
+        // successful retry already replaced it via loadBusinesses().
+        button.disabled = false;
+        button.textContent = originalText;
     }
-
-    await loadBusinesses();
 }
 
 async function deleteBusinessRow(userId) {
@@ -819,7 +838,7 @@ function createBusinessRow(biz) {
         const retryBtn = document.createElement("button");
         retryBtn.className = "retry-btn";
         retryBtn.textContent = "Retry Setup";
-        retryBtn.onclick = () => retryProvisioning(biz.user_id);
+        retryBtn.onclick = () => retryProvisioning(biz.user_id, retryBtn);
         actions.appendChild(retryBtn);
     }
 
