@@ -2,6 +2,7 @@ import logging
 
 from config import (
     DATABASE_URL,
+    BUSINESS_PORTAL_DATABASE_URL,
     TWILIO_ACCOUNT_SID,
     TWILIO_AUTH_TOKEN,
     TWILIO_VERIFY_SERVICE_SID,
@@ -38,12 +39,25 @@ def _env_vars_for_business(business_id: str) -> list:
     largely manual, Twilio-side approval process this pipeline doesn't
     attempt to automate - revisit if/when that becomes a real
     requirement (see config.py's comment on these same variables).
+
+    DATABASE_URL: uses BUSINESS_PORTAL_DATABASE_URL (a least-privilege
+    Postgres role - see provisioning/setup_business_portal_role.py) when
+    it's configured, falling back to this admin app's own full-access
+    DATABASE_URL otherwise. Every business-portal deployment is
+    customer-facing and has more attack surface than this admin app, so
+    it shouldn't hold the same credential this app uses for itself -
+    the fallback just means provisioning keeps working exactly as
+    before until an admin has actually run that setup script once.
     """
+
+    business_portal_database_url = (
+        BUSINESS_PORTAL_DATABASE_URL or DATABASE_URL
+    )
 
     return [
         {"key": "BUSINESS_ID", "value": business_id},
         {"key": "SESSION_SECRET_KEY", "generateValue": True},
-        {"key": "DATABASE_URL", "value": DATABASE_URL},
+        {"key": "DATABASE_URL", "value": business_portal_database_url},
         {"key": "TWILIO_ACCOUNT_SID", "value": TWILIO_ACCOUNT_SID},
         {"key": "TWILIO_AUTH_TOKEN", "value": TWILIO_AUTH_TOKEN},
         {"key": "TWILIO_VERIFY_SERVICE_SID", "value": TWILIO_VERIFY_SERVICE_SID},

@@ -55,6 +55,18 @@ RENDER_OWNER_ID = os.getenv("RENDER_OWNER_ID")
 # database/db.py's own separate os.getenv() read of the same variable.
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+# A least-privilege Postgres role for business-portal deployments,
+# created by running provisioning/setup_business_portal_role.py once
+# against the production database (see that script and PROVISIONING.md).
+# Every business-portal deployment is customer-facing and has more
+# attack surface than this admin app, so it shouldn't hold the same
+# full-access credential this app itself uses. When this is set,
+# provisioning/orchestrator.py forwards it as new deployments'
+# DATABASE_URL instead of the admin app's own DATABASE_URL above. Falls
+# back to DATABASE_URL if unset, so provisioning keeps working exactly
+# as before until the setup script has actually been run.
+BUSINESS_PORTAL_DATABASE_URL = os.getenv("BUSINESS_PORTAL_DATABASE_URL")
+
 # Shared across every provisioned business-portal deployment for now -
 # one Twilio WhatsApp Sandbox number and one Groq account serve every
 # customer, same as the two businesses set up manually before this

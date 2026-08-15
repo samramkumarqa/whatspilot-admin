@@ -35,7 +35,8 @@ hand.
 | `GITHUB_TEMPLATE_REPO` | The template repo to clone | Defaults to `whatspilot-business-template` - only change if you rename it |
 | `RENDER_API_KEY` | Creates the new web service | dashboard.render.com/u/*/settings#api-keys |
 | `RENDER_OWNER_ID` | Which Render workspace to create it in | Run `verify_render_provisioning.py` with only `RENDER_API_KEY` set - it lists your workspace IDs |
-| `DATABASE_URL` | Forwarded to each new deployment as its own `DATABASE_URL` (same shared Postgres) | Already set on this app for its own use - reused here |
+| `DATABASE_URL` | This admin app's own full-access Postgres connection. Also the fallback `DATABASE_URL` forwarded to new deployments if `BUSINESS_PORTAL_DATABASE_URL` (below) isn't set | Already set on this app for its own use |
+| `BUSINESS_PORTAL_DATABASE_URL` | *Optional.* A least-privilege Postgres connection forwarded to new deployments as their `DATABASE_URL` instead of the one above | Run `provisioning/setup_business_portal_role.py` once - see "Restricted Postgres role for business-portal deployments" below |
 | `TWILIO_ACCOUNT_SID` | Forwarded to each new deployment | Twilio Console -> Account Dashboard |
 | `TWILIO_AUTH_TOKEN` | Forwarded to each new deployment | Twilio Console -> Account Dashboard (click the eye icon) |
 | `TWILIO_VERIFY_SERVICE_SID` | Forwarded to each new deployment (OTP login) | Twilio Console -> Verify -> your Verify Service |
@@ -79,12 +80,39 @@ RENDER_API_KEY="..." RENDER_OWNER_ID="..." GITHUB_TEST_REPO_URL="..." python ver
 Both create a real, throwaway test resource (a repo / a service) that
 you should delete afterward.
 
-## Not yet done
+## Restricted Postgres role for business-portal deployments
 
-- **Restricted Postgres role** (tracked separately): every provisioned
-  deployment currently gets the *same* `DATABASE_URL` this admin app
-  itself uses - full read/write access to the whole database, not
-  scoped to that one business's rows. Fine for now given the shared-DB,
-  trusted-deployments model, but a restricted per-tenant role would be
-  a meaningful hardening step before this scales to many
-  externally-managed customer repos.
+Every business-portal deployment is a customer-facing app - more attack
+surface than this admin app - so it shouldn't hold the same full-access
+Postgres credential this app uses for itself. `provisioning/setup_business_portal_role.py`
+creates a dedicated, least-privilege role (`whatspilot_business_portal`)
+that can read/write only the tables business-portal code actually uses,
+can only *read* the `customer_numbers` tenant registry (never write to
+its own or another business's row), and isn't a Postgres superuser or
+able to `CREATEDB`/`CREATEROLE`.
+
+Run it once, locally, against production:
+
+```
+DATABASE_URL="<production Internal/External Database URL>" python provisioning/setup_business_portal_role.py
+```
+
+It prints a new connection string once - copy it into this app's Render
+environment as `BUSINESS_PORTAL_DATABASE_URL` immediately, it isn't
+saved anywhere. New businesses provisioned after that pick it up
+automatically (see `_env_vars_for_business()` in
+`provisioning/orchestrator.py`); it's optional, and provisioning falls
+back to the admin app's own `DATABASE_URL` until you've run this.
+Already-provisioned businesses keep using whatever `DATABASE_URL` they
+were given at the time - update their own Render env vars by hand if
+you want them covered too.
+
+**Known limitation:** Postgres requires table *ownership* to run
+`ALTER TABLE`, and ownership can't be granted piecemeal - so a future
+code change that adds a genuinely new *column* to an existing table
+needs that one `ALTER TABLE` run once by hand with the original
+(owner) `DATABASE_URL`, not by the restricted role. This doesn't affect
+day-to-day operation (every deployment's own migration code already
+skips columns that already exist) and doesn't apply to brand new
+*tables* (the restricted role can create and will own those itself).
+See the script's own docstring for the full reasoning.

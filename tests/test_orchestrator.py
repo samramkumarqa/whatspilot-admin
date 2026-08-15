@@ -113,6 +113,80 @@ def test_provision_business_passes_business_id_env_var(isolated_db, monkeypatch)
     assert "value" not in session_key_entry
 
 
+def test_provision_business_database_url_falls_back_when_no_restricted_role(
+    isolated_db, monkeypatch
+):
+    """
+    Before provisioning/setup_business_portal_role.py has been run,
+    BUSINESS_PORTAL_DATABASE_URL is unset - new deployments should still
+    get a working DATABASE_URL (falling back to this admin app's own),
+    not a blank/None value.
+    """
+
+    register_business("u1", "+14155550000")
+
+    monkeypatch.setattr(orchestrator, "DATABASE_URL", "postgresql://owner-conn")
+    monkeypatch.setattr(orchestrator, "BUSINESS_PORTAL_DATABASE_URL", None)
+
+    monkeypatch.setattr(
+        orchestrator, "create_repo_from_template", lambda *a, **k: FAKE_REPO
+    )
+    monkeypatch.setattr(orchestrator, "wait_for_repo_ready", lambda *a, **k: True)
+
+    captured = {}
+
+    def fake_create_service(name, repo_url, env_vars):
+        captured["env_vars"] = env_vars
+        return FAKE_SERVICE
+
+    monkeypatch.setattr(orchestrator, "create_web_service", fake_create_service)
+
+    orchestrator.provision_business("u1", "business_001")
+
+    db_url_entry = next(
+        item for item in captured["env_vars"] if item["key"] == "DATABASE_URL"
+    )
+    assert db_url_entry["value"] == "postgresql://owner-conn"
+
+
+def test_provision_business_uses_restricted_database_url_when_configured(
+    isolated_db, monkeypatch
+):
+    """
+    Once BUSINESS_PORTAL_DATABASE_URL is set (after running
+    provisioning/setup_business_portal_role.py), new deployments should
+    get that least-privilege connection string instead of the admin
+    app's own full-access DATABASE_URL.
+    """
+
+    register_business("u1", "+14155550000")
+
+    monkeypatch.setattr(orchestrator, "DATABASE_URL", "postgresql://owner-conn")
+    monkeypatch.setattr(
+        orchestrator, "BUSINESS_PORTAL_DATABASE_URL", "postgresql://restricted-conn"
+    )
+
+    monkeypatch.setattr(
+        orchestrator, "create_repo_from_template", lambda *a, **k: FAKE_REPO
+    )
+    monkeypatch.setattr(orchestrator, "wait_for_repo_ready", lambda *a, **k: True)
+
+    captured = {}
+
+    def fake_create_service(name, repo_url, env_vars):
+        captured["env_vars"] = env_vars
+        return FAKE_SERVICE
+
+    monkeypatch.setattr(orchestrator, "create_web_service", fake_create_service)
+
+    orchestrator.provision_business("u1", "business_001")
+
+    db_url_entry = next(
+        item for item in captured["env_vars"] if item["key"] == "DATABASE_URL"
+    )
+    assert db_url_entry["value"] == "postgresql://restricted-conn"
+
+
 def test_provision_business_github_failure_records_failed_status(isolated_db, monkeypatch):
 
     register_business("u1", "+14155550000")

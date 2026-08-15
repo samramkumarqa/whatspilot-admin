@@ -29,6 +29,12 @@ services:
       # (Render dashboard -> your Postgres -> Internal Database URL).
       - key: DATABASE_URL
         sync: false
+      # Optional: a least-privilege Postgres role for business-portal
+      # deployments (see provisioning/setup_business_portal_role.py and
+      # PROVISIONING.md). Leave unset until that script has been run
+      # once - provisioning falls back to DATABASE_URL above until then.
+      - key: BUSINESS_PORTAL_DATABASE_URL
+        sync: false
       # Provisioning: lets this app create a new GitHub repo (from the
       # whatspilot-business template) and a new Render web service
       # whenever a business is added in the registry. See config.py.
