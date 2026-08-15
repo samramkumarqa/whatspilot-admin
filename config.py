@@ -32,10 +32,18 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 # ----------------------------------------
 # Used when a business is added in the registry to spin up that
 # customer's own portal repo + live deployment automatically. See
-# provisioning/ (added in a later pass of the repo split).
+# provisioning/.
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-GITHUB_ORG = os.getenv("GITHUB_ORG")
+
+# The GitHub account new customer repos get created under. GitHub's
+# "generate repo from template" API takes a single `owner` login and
+# doesn't care whether it's a user account or an org - we're using the
+# personal account (github.com/samramkumarqa) rather than a dedicated
+# org, so this holds a username, not an org name. Also doubles as the
+# owner of the template repo itself, since both live in the same
+# account.
+GITHUB_OWNER = os.getenv("GITHUB_OWNER")
 GITHUB_TEMPLATE_REPO = os.getenv("GITHUB_TEMPLATE_REPO", "whatspilot-business-template")
 RENDER_API_KEY = os.getenv("RENDER_API_KEY")
 RENDER_OWNER_ID = os.getenv("RENDER_OWNER_ID")

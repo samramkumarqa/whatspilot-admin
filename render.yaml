@@ -34,7 +34,7 @@ services:
       # whenever a business is added in the registry. See config.py.
       - key: GITHUB_TOKEN
         sync: false
-      - key: GITHUB_ORG
+      - key: GITHUB_OWNER
         sync: false
       - key: GITHUB_TEMPLATE_REPO
         value: whatspilot-business-template
