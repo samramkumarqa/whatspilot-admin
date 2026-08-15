@@ -159,20 +159,26 @@ def wait_for_repo_ready(
     delay_seconds: float = 2.0,
 ) -> bool:
     """
-    Polls GET /repos/{full_name} until it reports non-zero content (via
-    the `size` field, in KB - 0 while GitHub is still copying the
-    template's files over) or the attempt budget runs out. See
+    Polls GET /repos/{full_name}/contents (the root directory listing)
+    until it returns actual files or the attempt budget runs out. See
     create_repo_from_template()'s docstring for why this matters: the
     repo object exists immediately, but its content lags by a few
     seconds. Only needed by callers that act on the repo's *contents*
     right away (e.g. deploying it) - anything that just links to the
     repo doesn't need this.
 
+    Deliberately checks the file listing itself rather than the repo
+    object's `size` field (KB, computed by a separate background job)
+    - `size` can stay 0 for well over a minute after the files are
+    already there and fully usable, which made this report "not ready"
+    for repos that were actually fine. The contents listing reflects
+    reality immediately.
+
     Returns True once content is detected, False if it never showed up
     within the attempt budget (caller decides whether that's fatal).
     """
 
-    url = f"{GITHUB_API_BASE}/repos/{full_name}"
+    url = f"{GITHUB_API_BASE}/repos/{full_name}/contents"
 
     for attempt in range(attempts):
 
@@ -186,8 +192,10 @@ def wait_for_repo_ready(
             time.sleep(delay_seconds)
             continue
 
-        if response.status_code == 200 and response.json().get("size", 0) > 0:
-            return True
+        if response.status_code == 200:
+            body = response.json()
+            if isinstance(body, list) and len(body) > 0:
+                return True
 
         time.sleep(delay_seconds)
 

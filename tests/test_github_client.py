@@ -246,16 +246,25 @@ def test_wait_for_repo_ready_succeeds_immediately(monkeypatch):
     _configure(monkeypatch)
     monkeypatch.setattr(github_client.time, "sleep", lambda s: None)
 
-    monkeypatch.setattr(
-        github_client.requests,
-        "get",
-        lambda *a, **k: FakeResponse(200, {"size": 42}),
-    )
+    captured = {}
+
+    def fake_get(url, headers, timeout):
+        captured["url"] = url
+        return FakeResponse(
+            200,
+            [{"name": "main.py"}, {"name": "requirements.txt"}],
+        )
+
+    monkeypatch.setattr(github_client.requests, "get", fake_get)
 
     assert wait_for_repo_ready("samramkumarqa/whatspilot-business_003") is True
+    assert captured["url"] == (
+        "https://api.github.com/repos/samramkumarqa/"
+        "whatspilot-business_003/contents"
+    )
 
 
-def test_wait_for_repo_ready_times_out(monkeypatch):
+def test_wait_for_repo_ready_times_out_on_empty_listing(monkeypatch):
 
     _configure(monkeypatch)
     monkeypatch.setattr(github_client.time, "sleep", lambda s: None)
@@ -263,7 +272,21 @@ def test_wait_for_repo_ready_times_out(monkeypatch):
     monkeypatch.setattr(
         github_client.requests,
         "get",
-        lambda *a, **k: FakeResponse(200, {"size": 0}),
+        lambda *a, **k: FakeResponse(200, []),
+    )
+
+    assert wait_for_repo_ready("samramkumarqa/x", attempts=3) is False
+
+
+def test_wait_for_repo_ready_times_out_on_404(monkeypatch):
+
+    _configure(monkeypatch)
+    monkeypatch.setattr(github_client.time, "sleep", lambda s: None)
+
+    monkeypatch.setattr(
+        github_client.requests,
+        "get",
+        lambda *a, **k: FakeResponse(404, {}),
     )
 
     assert wait_for_repo_ready("samramkumarqa/x", attempts=3) is False
@@ -280,7 +303,7 @@ def test_wait_for_repo_ready_retries_past_network_errors(monkeypatch):
         calls["n"] += 1
         if calls["n"] < 2:
             raise requests.ConnectionError("flaky")
-        return FakeResponse(200, {"size": 10})
+        return FakeResponse(200, [{"name": "main.py"}])
 
     monkeypatch.setattr(github_client.requests, "get", flaky_get)
 
