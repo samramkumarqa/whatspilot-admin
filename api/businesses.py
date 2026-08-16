@@ -144,6 +144,29 @@ async def provision_business_route(user_id: str):
             detail="Business not found"
         )
 
+    # Retry Setup is meant for a business stuck at 'pending'/'failed' -
+    # templates/businesses.html already hides the button once a business
+    # is 'live', but that's only a UI convenience, not enforcement. A
+    # direct POST here (a stale tab, a second admin, or a double-click
+    # racing the first request) on an already-live business would call
+    # create_web_service() again and spin up a *second* Render service
+    # under the same deterministic name, which Render then rejects -
+    # see provisioning/orchestrator.py and PROVISIONING.md's own
+    # warning about this. Reject it server-side instead of relying on
+    # the button being hidden.
+    if business["provisioning_status"] == "live":
+
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This business is already live - re-running setup would "
+                "risk creating a duplicate Render deployment. See "
+                "PROVISIONING.md's \"Giving a business its own WhatsApp "
+                "number\" section for how to update an already-live "
+                "business safely."
+            )
+        )
+
     provisioning = await run_in_threadpool(
         provision_business, user_id, business["business_id"]
     )

@@ -326,6 +326,57 @@ def test_provision_business_route_retries_and_returns_result(isolated_db, monkey
     assert result["provisioning"]["provisioning_status"] == "live"
 
 
+def test_provision_business_route_rejects_retry_on_already_live_business(
+    isolated_db, monkeypatch
+):
+    """
+    Regression test: this route used to call provision_business() again
+    on ANY registered business regardless of its current
+    provisioning_status - templates/businesses.html hides the Retry
+    Setup button once a business is 'live', but that's only a UI
+    convenience. A direct POST here (stale tab, second admin, or a
+    double-click racing the first request) on an already-live business
+    would call create_web_service() again and try to spin up a *second*
+    Render service under the same deterministic name - see
+    PROVISIONING.md's own warning about this. Now rejected with a 409
+    before provision_business() is ever called.
+    """
+
+    import api.businesses as businesses_module
+
+    monkeypatch.setattr(
+        businesses_module, "provision_business",
+        lambda user_id, business_id: {
+            "provisioning_status": "live",
+            "provisioning_error": None,
+            "github_repo_url": "https://github.com/samramkumarqa/whatspilot-business_001",
+            "render_service_id": "srv-abc123",
+            "render_service_url": "https://whatspilot-business_001.onrender.com",
+        }
+    )
+
+    asyncio.run(create_business(
+        RegisterBusinessRequest(user_id="u1", whatsapp_number="+14155550000")
+    ))
+
+    called = {"count": 0}
+
+    def _should_not_be_called(user_id, business_id):
+        called["count"] += 1
+        raise AssertionError(
+            "provision_business() should never be called for an "
+            "already-live business"
+        )
+
+    monkeypatch.setattr(businesses_module, "provision_business", _should_not_be_called)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(provision_business_route("u1"))
+
+    assert exc_info.value.status_code == 409
+    assert called["count"] == 0
+
+
 def test_get_business_returns_row(isolated_db):
     register_business("u1", "+14155550000")
 

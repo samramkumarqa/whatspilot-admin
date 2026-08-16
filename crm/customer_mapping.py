@@ -336,6 +336,13 @@ def get_business(user_id: str):
     a repo that already exists from an earlier attempt - and skip
     straight to Render service creation on retry instead of unconditionally
     trying to create the same repo again.
+
+    render_service_id/render_service_url are included so a *failed*
+    provisioning attempt (see provision_business()'s failure branches)
+    can fall back to whatever was already on file instead of always
+    overwriting them with None - otherwise a failure on what should have
+    been a no-op retry (or a race with a concurrent attempt) could wipe
+    out the record of an already-live, still-running Render service.
     """
 
     conn = get_crm_connection()
@@ -349,7 +356,9 @@ def get_business(user_id: str):
             status,
             provisioning_status,
             github_repo_url,
-            twilio_whatsapp_number
+            twilio_whatsapp_number,
+            render_service_id,
+            render_service_url
         FROM customer_numbers
         WHERE user_id = ?
         """,
@@ -369,6 +378,8 @@ def get_business(user_id: str):
         "provisioning_status": row[4],
         "github_repo_url": row[5],
         "twilio_whatsapp_number": row[6],
+        "render_service_id": row[7],
+        "render_service_url": row[8],
     }
 
 

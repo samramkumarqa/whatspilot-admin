@@ -10,7 +10,7 @@ each step, and that a failure never raises out of provision_business().
 """
 
 import provisioning.orchestrator as orchestrator
-from crm.customer_mapping import register_business, list_businesses
+from crm.customer_mapping import register_business, list_businesses, get_business
 from provisioning.github_client import GitHubProvisioningError
 from provisioning.render_client import RenderProvisioningError
 
@@ -412,6 +412,57 @@ def test_provision_business_retry_reuses_existing_repo(isolated_db, monkeypatch)
     assert result["provisioning_status"] == "live"
     assert result["github_repo_url"] == FAKE_REPO["html_url"]
     assert captured["repo_url"] == FAKE_REPO["html_url"]
+
+
+def test_provision_business_failure_preserves_existing_render_service(
+    isolated_db, monkeypatch
+):
+    """
+    Regression test: a failed provisioning attempt used to unconditionally
+    write render_service_id/render_service_url as None, even for a
+    business that was already live with a real, still-running Render
+    service on file - see get_business()'s docstring for why. This
+    simulates a business that's already live, then a subsequent attempt
+    (e.g. a race with a concurrent retry, before api/businesses.py's own
+    409 guard existed) that fails at the Render step - the previously
+    good render_service_id/url must survive that failure untouched.
+    """
+
+    register_business("u1", "+14155550000")
+
+    # Simulate this business already being live with a real Render
+    # service on file, same as a normal successful provision_business()
+    # call would have recorded.
+    from crm.customer_mapping import update_provisioning_result
+    update_provisioning_result(
+        "u1",
+        provisioning_status="live",
+        provisioning_error=None,
+        github_repo_url=FAKE_REPO["html_url"],
+        render_service_id=FAKE_SERVICE["id"],
+        render_service_url=FAKE_SERVICE["url"],
+    )
+
+    monkeypatch.setattr(
+        orchestrator, "create_repo_from_template", lambda *a, **k: FAKE_REPO
+    )
+    monkeypatch.setattr(orchestrator, "wait_for_repo_ready", lambda *a, **k: True)
+
+    def fake_create_service(*a, **k):
+        raise RenderProvisioningError("name already exists")
+
+    monkeypatch.setattr(orchestrator, "create_web_service", fake_create_service)
+
+    result = orchestrator.provision_business("u1", "business_001")
+
+    assert result["provisioning_status"] == "failed"
+    # The already-good values must survive, not be nulled out.
+    assert result["render_service_id"] == FAKE_SERVICE["id"]
+    assert result["render_service_url"] == FAKE_SERVICE["url"]
+
+    row = get_business("u1")
+    assert row["render_service_id"] == FAKE_SERVICE["id"]
+    assert row["render_service_url"] == FAKE_SERVICE["url"]
 
 
 def test_provision_business_survives_wait_for_repo_ready_raising(isolated_db, monkeypatch):

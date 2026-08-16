@@ -196,9 +196,13 @@ button:hover {
     </div>
     {% endif %}
 
-    <div class="login-switch">
-        Business owner? <a href="/business-login">Log in with your WhatsApp number</a>
-    </div>
+    <!-- A "Business owner? Log in with your WhatsApp number" link used to
+         live here, pointing at /business-login - but that route doesn't
+         exist on this admin app anymore (see templates/businesses.html's
+         own fix for the same stale link). Business-owner login moved to
+         each customer's own per-business deployment when this app was
+         split from whatspilot-business-repo, so there's no single fixed
+         URL here to send them to. -->
 
 </div>
 

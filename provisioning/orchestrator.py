@@ -173,12 +173,25 @@ def provision_business(user_id: str, business_id: str) -> dict:
                 "Provisioning failed for %s at repo creation: %s", user_id, e
             )
 
+            # render_service_id/url fall back to whatever was already on
+            # file (None for a genuinely first attempt, but not for a
+            # retry or a race with a concurrent attempt) rather than
+            # being hardcoded to None - see get_business()'s docstring
+            # for why unconditionally nulling these out here would wipe
+            # the record of an already-live, still-running Render
+            # service that this particular failed attempt never touched.
             result = {
                 "provisioning_status": "failed",
                 "provisioning_error": f"GitHub: {e}",
                 "github_repo_url": None,
-                "render_service_id": None,
-                "render_service_url": None,
+                "render_service_id": (
+                    existing_business.get("render_service_id")
+                    if existing_business else None
+                ),
+                "render_service_url": (
+                    existing_business.get("render_service_url")
+                    if existing_business else None
+                ),
             }
             update_provisioning_result(user_id, **result)
             return result
@@ -223,12 +236,20 @@ def provision_business(user_id: str, business_id: str) -> dict:
             "Provisioning failed for %s at service creation: %s", user_id, e
         )
 
+        # Same fallback-instead-of-hardcoded-None reasoning as the
+        # GitHub-failure branch above.
         result = {
             "provisioning_status": "failed",
             "provisioning_error": f"Render: {e}",
             "github_repo_url": repo["html_url"],
-            "render_service_id": None,
-            "render_service_url": None,
+            "render_service_id": (
+                existing_business.get("render_service_id")
+                if existing_business else None
+            ),
+            "render_service_url": (
+                existing_business.get("render_service_url")
+                if existing_business else None
+            ),
         }
         update_provisioning_result(user_id, **result)
         return result
