@@ -138,9 +138,19 @@ def main():
 
         if role_exists:
             print(f"Role '{ROLE_NAME}' already exists - resetting its password.")
+            # Deliberately does NOT restate NOSUPERUSER/NOCREATEDB/NOCREATEROLE/
+            # NOREPLICATION here, even though it's harmless in principle (the
+            # role already has these attributes from when it was first
+            # created below). Postgres 16+ restricts ALTER ROLE ... SUPERUSER/
+            # NOSUPERUSER (and REPLICATION/BYPASSRLS) to actual superusers
+            # only, regardless of the value being set or who owns/created the
+            # role - CREATEROLE isn't enough. Managed Postgres providers
+            # (Render, Supabase, RDS, ...) never hand out real superuser, so
+            # including those clauses here fails with "permission denied to
+            # alter role" even on a role this same script created. Only the
+            # password needs to change on a re-run, so only touch that.
             cur.execute(
-                f'ALTER ROLE "{ROLE_NAME}" WITH LOGIN PASSWORD %s '
-                f"NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION",
+                f'ALTER ROLE "{ROLE_NAME}" WITH LOGIN PASSWORD %s',
                 (password,),
             )
         else:
