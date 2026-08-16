@@ -49,6 +49,19 @@ class RegisterBusinessRequest(BaseModel):
         default=None, pattern=PHONE_PATTERN
     )
 
+    # The business's own number, already registered with Twilio as a
+    # WhatsApp sender (with its webhook pointed at this business's Render
+    # URL) - neither of which this app automates, see PROVISIONING.md.
+    # Optional and almost always blank at registration time: leaving it
+    # unset means provisioning falls back to the shared Twilio Sandbox
+    # number every business has used until now (see
+    # provisioning/orchestrator.py's _env_vars_for_business()). Only fill
+    # this in for a business that already has its own live number set up
+    # end-to-end on the Twilio/Meta side.
+    twilio_whatsapp_number: str | None = Field(
+        default=None, pattern=PHONE_PATTERN
+    )
+
 
 class UpdateBusinessStatusRequest(BaseModel):
 
@@ -82,7 +95,8 @@ async def create_business(request: RegisterBusinessRequest):
         register_business,
         request.user_id,
         request.whatsapp_number,
-        request.owner_whatsapp_number
+        request.owner_whatsapp_number,
+        request.twilio_whatsapp_number
     )
 
     if result is None:

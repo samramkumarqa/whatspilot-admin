@@ -493,6 +493,23 @@ input.field-invalid {
     >
     <div id="bizOwnerNumberError" class="field-error"></div>
 
+    <label>Twilio WhatsApp Number (optional - only if already set up)</label>
+    <div class="field-hint">
+        Leave this blank unless this business already has its own number
+        fully registered with Twilio/Meta <em>and</em> its webhook
+        pointed at this business's Render URL - both manual steps this
+        page doesn't do for you. Until then, its portal uses the shared
+        Twilio Sandbox number like every other business.
+    </div>
+    <input
+        id="bizTwilioNumber"
+        placeholder="+14155238886"
+        maxlength="16"
+        inputmode="tel"
+        oninput="sanitizePhoneField(this, 'bizTwilioNumber')"
+    >
+    <div id="bizTwilioNumberError" class="field-error"></div>
+
     <button id="registerBtn" onclick="registerBusiness()">
         Add Business
     </button>
@@ -539,7 +556,8 @@ function escapeHtml(text) {
 const FIELD_LIMITS = {
     bizWhatsappNumber: 16,
     bizUserId: 50,
-    bizOwnerNumber: 16
+    bizOwnerNumber: 16,
+    bizTwilioNumber: 16
 };
 
 function showFieldError(fieldId, message) {
@@ -609,6 +627,7 @@ async function registerBusiness() {
     const whatsappNumber = document.getElementById("bizWhatsappNumber").value.trim();
     const userId = document.getElementById("bizUserId").value.trim();
     const ownerNumber = document.getElementById("bizOwnerNumber").value.trim();
+    const twilioNumber = document.getElementById("bizTwilioNumber").value.trim();
 
     const whatsappError = validatePhone(whatsappNumber, "Business WhatsApp Number", true);
     if (whatsappError) {
@@ -631,6 +650,13 @@ async function registerBusiness() {
     }
     clearFieldError("bizOwnerNumber");
 
+    const twilioError = validatePhone(twilioNumber, "Twilio WhatsApp Number", false);
+    if (twilioError) {
+        showFieldError("bizTwilioNumber", twilioError);
+        return;
+    }
+    clearFieldError("bizTwilioNumber");
+
     const registerBtn = document.getElementById("registerBtn");
     registerBtn.disabled = true;
 
@@ -644,7 +670,8 @@ async function registerBusiness() {
             body: JSON.stringify({
                 user_id: userId,
                 whatsapp_number: whatsappNumber,
-                owner_whatsapp_number: ownerNumber || null
+                owner_whatsapp_number: ownerNumber || null,
+                twilio_whatsapp_number: twilioNumber || null
             })
         });
 
@@ -673,6 +700,7 @@ async function registerBusiness() {
         document.getElementById("bizWhatsappNumber").value = "";
         document.getElementById("bizUserId").value = "";
         document.getElementById("bizOwnerNumber").value = "";
+        document.getElementById("bizTwilioNumber").value = "";
 
         await loadBusinesses();
 
@@ -843,6 +871,9 @@ function createBusinessRow(biz) {
                 ${biz.owner_whatsapp_number
                     ? ` · Owner: ${escapeHtml(biz.owner_whatsapp_number)}`
                     : ""}
+                ${biz.twilio_whatsapp_number
+                    ? ` · Twilio: ${escapeHtml(biz.twilio_whatsapp_number)}`
+                    : ` · Twilio: shared Sandbox number`}
             </div>
             ${provisioningRowHtml(biz)}
         </div>

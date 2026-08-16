@@ -97,6 +97,23 @@ def init_customer_mapping():
             "ALTER TABLE customer_numbers ADD COLUMN render_service_url TEXT"
         )
 
+    # The business's own dedicated Twilio WhatsApp number, for
+    # provisioning to inject as that deployment's TWILIO_WHATSAPP_NUMBER
+    # env var (see provisioning/orchestrator.py's _env_vars_for_business()).
+    # Deliberately a *separate* column from whatsapp_number above, even
+    # though in the end state they'd describe the same number:
+    # whatsapp_number is required at registration and used for CRM/login
+    # matching regardless of whether Twilio setup is done yet, while this
+    # column stays NULL until an admin has actually finished registering
+    # the number with Twilio/Meta and pointing its webhook at this
+    # business's Render URL by hand (neither of which this app automates -
+    # see PROVISIONING.md). NULL means "use the shared Sandbox number
+    # provisioning has always used" - existing businesses are unaffected.
+    if "twilio_whatsapp_number" not in existing_business_columns:
+        conn.execute(
+            "ALTER TABLE customer_numbers ADD COLUMN twilio_whatsapp_number TEXT"
+        )
+
     # Customer → Business mapping table
     conn.execute("""
         CREATE TABLE IF NOT EXISTS customer_mapping (
@@ -279,7 +296,8 @@ def list_businesses():
             provisioning_error,
             github_repo_url,
             render_service_id,
-            render_service_url
+            render_service_url,
+            twilio_whatsapp_number
         FROM customer_numbers
         ORDER BY created_at DESC
         """
@@ -300,6 +318,7 @@ def list_businesses():
             "github_repo_url": row[8],
             "render_service_id": row[9],
             "render_service_url": row[10],
+            "twilio_whatsapp_number": row[11],
         }
         for row in rows
     ]
@@ -329,7 +348,8 @@ def get_business(user_id: str):
             business_id,
             status,
             provisioning_status,
-            github_repo_url
+            github_repo_url,
+            twilio_whatsapp_number
         FROM customer_numbers
         WHERE user_id = ?
         """,
@@ -348,6 +368,7 @@ def get_business(user_id: str):
         "status": row[3],
         "provisioning_status": row[4],
         "github_repo_url": row[5],
+        "twilio_whatsapp_number": row[6],
     }
 
 
@@ -477,7 +498,8 @@ def _generate_business_id(conn):
 def register_business(
     user_id: str,
     whatsapp_number: str,
-    owner_whatsapp_number: str = None
+    owner_whatsapp_number: str = None,
+    twilio_whatsapp_number: str = None
 ):
     """
     The "add business WhatsApp number" step of the admin activation flow -
@@ -487,6 +509,14 @@ def register_business(
     'active' - the right behavior for the pre-registry single-tenant
     migration, wrong here: a newly registered business shouldn't start
     running automation before an admin has actually clicked Activate).
+
+    twilio_whatsapp_number is optional and separate from whatsapp_number
+    above - it's the business's own number *already registered with
+    Twilio*, for provisioning to use instead of the shared Sandbox
+    number (see provisioning/orchestrator.py's _env_vars_for_business()).
+    Almost always left blank at registration time, since Twilio
+    registration is a manual, out-of-band step - see customer_numbers'
+    schema comment in init_customer_mapping() for the full reasoning.
 
     Returns None if user_id is already registered - the caller (see
     api/businesses.py) turns that into a 409 rather than silently
@@ -565,10 +595,10 @@ def register_business(
         conn.execute(
             """
             INSERT INTO customer_numbers
-            (user_id, whatsapp_number, business_id, status, owner_whatsapp_number, provisioning_status)
-            VALUES (?, ?, ?, 'inactive', ?, 'pending')
+            (user_id, whatsapp_number, business_id, status, owner_whatsapp_number, provisioning_status, twilio_whatsapp_number)
+            VALUES (?, ?, ?, 'inactive', ?, 'pending', ?)
             """,
-            (user_id, whatsapp_number, business_id, owner_whatsapp_number)
+            (user_id, whatsapp_number, business_id, owner_whatsapp_number, twilio_whatsapp_number)
         )
 
         conn.commit()
@@ -579,6 +609,7 @@ def register_business(
             "business_id": business_id,
             "status": "inactive",
             "owner_whatsapp_number": owner_whatsapp_number,
+            "twilio_whatsapp_number": twilio_whatsapp_number,
         }
 
     except psycopg2.IntegrityError:

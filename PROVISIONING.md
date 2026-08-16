@@ -40,19 +40,49 @@ hand.
 | `TWILIO_ACCOUNT_SID` | Forwarded to each new deployment | Twilio Console -> Account Dashboard |
 | `TWILIO_AUTH_TOKEN` | Forwarded to each new deployment | Twilio Console -> Account Dashboard (click the eye icon) |
 | `TWILIO_VERIFY_SERVICE_SID` | Forwarded to each new deployment (OTP login) | Twilio Console -> Verify -> your Verify Service |
-| `TWILIO_WHATSAPP_NUMBER` | Forwarded to each new deployment | Your Twilio WhatsApp Sandbox or WABA number, `whatsapp:+1...` format |
+| `TWILIO_WHATSAPP_NUMBER` | Forwarded to each new deployment *unless* that business has its own number set (see below) | Your Twilio WhatsApp Sandbox number, used as the default/fallback |
 | `GROQ_API_KEY` | Forwarded to each new deployment (AI replies) | console.groq.com |
 | `OTP_CHANNEL` | Forwarded to each new deployment | Defaults to `sms` - only change if you switch OTP delivery |
 
-**Known limitation:** `TWILIO_*` and `GROQ_API_KEY` are shared across
-every customer deployment - there's one WhatsApp Sandbox number and one
-Groq account serving all of them right now, same as the businesses set
-up manually before this pipeline existed. Giving each customer their
-own WhatsApp Business API number is a largely manual, Twilio-side
-approval process this pipeline doesn't attempt to automate. If that
-becomes a real requirement, these would need to move from "shared
-config the admin app forwards" to "collected per-business at
-registration time" instead - a bigger change than described here.
+### Giving a business its own WhatsApp number
+
+By default every business shares the one `TWILIO_WHATSAPP_NUMBER` above
+(the Sandbox number), same as before this section existed -
+`TWILIO_ACCOUNT_SID`/`AUTH_TOKEN`/`VERIFY_SERVICE_SID` stay shared for
+every business too, deliberately: one Twilio account can host many
+independent WhatsApp senders under the same WABA, so there's no need
+for separate account credentials per business, and Verify Service SID
+isn't tied to any one business's number either.
+
+The "Twilio WhatsApp Number" field on the Add Business form (backed by
+`customer_numbers.twilio_whatsapp_number`, see
+`crm/customer_mapping.py`) lets a specific business use its own number
+instead. Filling it in is only useful once you've done two things by
+hand, neither of which this pipeline automates:
+
+1. Registered that number as a WhatsApp sender with Twilio/Meta (the
+   Self Sign-up flow in Twilio Console - Messaging -> Senders ->
+   WhatsApp Senders).
+2. Pointed that number's inbound webhook at the specific business's own
+   Render URL (`https://<their-service>.onrender.com/webhook`) - not
+   the shared admin app or another business's URL.
+
+Set the field when *registering* a new business and it flows through
+automatically on first provisioning - `_env_vars_for_business()` in
+`provisioning/orchestrator.py` picks it up and uses it instead of the
+shared Sandbox number for that deployment. Leave it blank for every
+other business; they're unaffected.
+
+For a business that's already live and provisioned, don't use this
+field or **Retry Setup** to switch it over - `create_web_service()` in
+`provisioning/render_client.py` always creates a *new* Render service,
+it never updates an existing one, so re-provisioning an already-live
+business would spin up a duplicate deployment rather than update its
+number. Instead, update the number by hand in two places: the
+`twilio_whatsapp_number` column on that business's row (so it's on
+record and any *future* re-provisioning picks it up correctly), and the
+`TWILIO_WHATSAPP_NUMBER` env var on that business's *existing* Render
+service directly (Render dashboard -> that service -> Environment).
 
 ## Before it'll work: Render's GitHub access
 

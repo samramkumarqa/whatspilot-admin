@@ -187,6 +187,78 @@ def test_provision_business_uses_restricted_database_url_when_configured(
     assert db_url_entry["value"] == "postgresql://restricted-conn"
 
 
+def test_provision_business_falls_back_to_shared_number_when_none_set(
+    isolated_db, monkeypatch
+):
+    """
+    A business registered without its own twilio_whatsapp_number (the
+    default for every business today) should still get a working
+    TWILIO_WHATSAPP_NUMBER env var - falling back to the admin app's
+    shared Sandbox number, same as before this field existed.
+    """
+
+    register_business("u1", "+14155550000")
+
+    monkeypatch.setattr(orchestrator, "TWILIO_WHATSAPP_NUMBER", "+14155238886")
+
+    monkeypatch.setattr(
+        orchestrator, "create_repo_from_template", lambda *a, **k: FAKE_REPO
+    )
+    monkeypatch.setattr(orchestrator, "wait_for_repo_ready", lambda *a, **k: True)
+
+    captured = {}
+
+    def fake_create_service(name, repo_url, env_vars):
+        captured["env_vars"] = env_vars
+        return FAKE_SERVICE
+
+    monkeypatch.setattr(orchestrator, "create_web_service", fake_create_service)
+
+    orchestrator.provision_business("u1", "business_001")
+
+    number_entry = next(
+        item for item in captured["env_vars"]
+        if item["key"] == "TWILIO_WHATSAPP_NUMBER"
+    )
+    assert number_entry["value"] == "+14155238886"
+
+
+def test_provision_business_uses_own_number_when_set(isolated_db, monkeypatch):
+    """
+    A business that already has its own twilio_whatsapp_number on file
+    (set at registration, see api/businesses.py's RegisterBusinessRequest)
+    should get that number in its deployment's env vars instead of the
+    shared Sandbox number.
+    """
+
+    register_business(
+        "u1", "+14155550000", twilio_whatsapp_number="+14155559999"
+    )
+
+    monkeypatch.setattr(orchestrator, "TWILIO_WHATSAPP_NUMBER", "+14155238886")
+
+    monkeypatch.setattr(
+        orchestrator, "create_repo_from_template", lambda *a, **k: FAKE_REPO
+    )
+    monkeypatch.setattr(orchestrator, "wait_for_repo_ready", lambda *a, **k: True)
+
+    captured = {}
+
+    def fake_create_service(name, repo_url, env_vars):
+        captured["env_vars"] = env_vars
+        return FAKE_SERVICE
+
+    monkeypatch.setattr(orchestrator, "create_web_service", fake_create_service)
+
+    orchestrator.provision_business("u1", "business_001")
+
+    number_entry = next(
+        item for item in captured["env_vars"]
+        if item["key"] == "TWILIO_WHATSAPP_NUMBER"
+    )
+    assert number_entry["value"] == "+14155559999"
+
+
 def test_provision_business_github_failure_records_failed_status(isolated_db, monkeypatch):
 
     register_business("u1", "+14155550000")

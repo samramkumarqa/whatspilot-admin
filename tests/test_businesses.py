@@ -157,6 +157,19 @@ def test_create_business_route_success(isolated_db):
     assert result["business"]["owner_whatsapp_number"] == "+919876543210"
 
 
+def test_create_business_route_passes_through_twilio_whatsapp_number(isolated_db):
+    result = asyncio.run(create_business(
+        RegisterBusinessRequest(
+            user_id="u1",
+            whatsapp_number="+14155550000",
+            twilio_whatsapp_number="+14155551234"
+        )
+    ))
+
+    assert result["status"] == "success"
+    assert result["business"]["twilio_whatsapp_number"] == "+14155551234"
+
+
 def test_create_business_route_rejects_duplicate_with_409(isolated_db):
     asyncio.run(create_business(
         RegisterBusinessRequest(user_id="u1", whatsapp_number="+14155550000")
@@ -327,6 +340,30 @@ def test_get_business_returns_none_for_unknown_user(isolated_db):
     assert get_business("ghost") is None
 
 
+def test_get_business_twilio_whatsapp_number_defaults_to_none(isolated_db):
+    register_business("u1", "+14155550000")
+
+    business = get_business("u1")
+
+    assert business["twilio_whatsapp_number"] is None
+
+
+def test_get_business_twilio_whatsapp_number_round_trips_when_set(isolated_db):
+    register_business(
+        "u1", "+14155550000", twilio_whatsapp_number="+14155551234"
+    )
+
+    business = get_business("u1")
+
+    assert business["twilio_whatsapp_number"] == "+14155551234"
+
+    # list_businesses() reads from a separate SELECT/row-index mapping -
+    # cover it too so a column-order mistake there wouldn't slip past
+    # get_business()'s own (different) row index and go unnoticed.
+    listed = next(b for b in list_businesses() if b["user_id"] == "u1")
+    assert listed["twilio_whatsapp_number"] == "+14155551234"
+
+
 def test_get_businesses_route_lists_all(isolated_db):
     asyncio.run(create_business(
         RegisterBusinessRequest(user_id="u1", whatsapp_number="+14155550000")
@@ -371,6 +408,20 @@ def test_register_request_rejects_invalid_owner_number():
             user_id="u1",
             whatsapp_number="+14155550000",
             owner_whatsapp_number="abc"
+        )
+
+
+def test_register_request_allows_missing_twilio_whatsapp_number():
+    request = RegisterBusinessRequest(user_id="u1", whatsapp_number="+14155550000")
+    assert request.twilio_whatsapp_number is None
+
+
+def test_register_request_rejects_invalid_twilio_whatsapp_number():
+    with pytest.raises(ValidationError):
+        RegisterBusinessRequest(
+            user_id="u1",
+            whatsapp_number="+14155550000",
+            twilio_whatsapp_number="abc"
         )
 
 
