@@ -308,14 +308,6 @@ input.field-invalid {
   background: var(--color-danger-dark);
 }
 
-.view-btn {
-  background: var(--color-blue);
-}
-
-.view-btn:hover {
-  background: var(--color-primary-hover);
-}
-
 .business-list-empty {
   padding: 14px 0;
   color: var(--color-gray-600);
@@ -748,13 +740,32 @@ async function retryProvisioning(userId, button) {
     }
 }
 
-async function deleteBusinessRow(userId) {
+async function deleteBusinessRow(userId, biz) {
 
-    if (!confirm(
-        `Remove ${userId} from the business registry? Its rules, leads, ` +
-        `and messages are NOT deleted, just no longer reachable through ` +
-        `this business.`
-    )) return;
+    // Deleting only removes the registry row (see crm/customer_mapping.py's
+    // delete_business()) - it never touches the business's provisioned
+    // GitHub repo or Render service, which keep running (and billing)
+    // afterward with no link back to them in this UI. Surface that
+    // explicitly whenever those resources actually exist, so an admin
+    // doesn't lose track of them the way we did with an earlier test
+    // business - they still need to be deleted by hand on GitHub/Render.
+    const hasProvisionedResources = Boolean(
+        biz && (biz.github_repo_url || biz.render_service_url)
+    );
+
+    const warning = hasProvisionedResources
+        ? `Remove ${userId} from the business registry? Its rules, leads, ` +
+          `and messages are NOT deleted, just no longer reachable through ` +
+          `this business.\n\nIts GitHub repo and Render service also stay ` +
+          `live and keep billing after this - delete those separately on ` +
+          `GitHub/Render if you want them fully gone` +
+          (biz.render_service_url ? ` (${biz.render_service_url})` : "") +
+          `.`
+        : `Remove ${userId} from the business registry? Its rules, leads, ` +
+          `and messages are NOT deleted, just no longer reachable through ` +
+          `this business.`;
+
+    if (!confirm(warning)) return;
 
     const response = await fetch(
         `/business-registry/${encodeURIComponent(userId)}`,
@@ -851,21 +862,6 @@ function createBusinessRow(biz) {
         actions.appendChild(retryBtn);
     }
 
-    // Only active businesses have a working dashboard to view - the
-    // admin picks which business's dashboard/analytics/settings pages
-    // render via this ?business= param (see auth.py's
-    // resolve_dashboard_user_id()); inactive businesses aren't
-    // meaningful to view yet, same gate as business-owner login itself.
-    if (isActive) {
-        const viewBtn = document.createElement("button");
-        viewBtn.className = "view-btn";
-        viewBtn.textContent = "View Dashboard";
-        viewBtn.onclick = () => {
-            window.location.href = `/?business=${encodeURIComponent(biz.user_id)}`;
-        };
-        actions.appendChild(viewBtn);
-    }
-
     const toggleBtn = document.createElement("button");
     toggleBtn.className = isActive ? "deactivate-btn" : "activate-btn";
     toggleBtn.textContent = isActive ? "Deactivate" : "Activate";
@@ -875,7 +871,7 @@ function createBusinessRow(biz) {
     const deleteBtn = document.createElement("button");
     deleteBtn.className = "delete-btn";
     deleteBtn.textContent = "Delete";
-    deleteBtn.onclick = () => deleteBusinessRow(biz.user_id);
+    deleteBtn.onclick = () => deleteBusinessRow(biz.user_id, biz);
     actions.appendChild(deleteBtn);
 
     return li;
