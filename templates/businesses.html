@@ -3,13 +3,20 @@
 <head>
     <title>Businesses - Website AI Assistant</title>
 
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
     <style>
 
 :root {
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
-  --color-primary-light: #dbeafe;
-  --color-primary-lighter: #eff6ff;
+  /* WhatsPilot brand palette - matches the marketing site
+     (whatspilot-marketing-site.html); --color-blue is left alone, it's
+     a separate semantic indicator, not a brand color. */
+  --color-primary: #12805A;
+  --color-primary-hover: #0F6B4C;
+  --color-primary-light: #E4F5EC;
+  --color-primary-lighter: #F2FAF6;
   --color-blue: #3b82f6;
 
   --color-gray-50: #f8fafc;
@@ -47,7 +54,7 @@
 body {
   min-height: 100vh;
 
-  font-family: "Segoe UI", sans-serif;
+  font-family: 'Inter', "Segoe UI", sans-serif;
 
   background: #f4f7fb;
 
@@ -55,6 +62,8 @@ body {
 
   padding: 14px;
 }
+
+h1, h2, h3, h4 { font-family: 'Manrope', 'Inter', "Segoe UI", sans-serif; }
 
 /* HEADER */
 
@@ -79,13 +88,13 @@ body {
   width: 56px;
   height: 56px;
   border-radius: 16px;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-blue));
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover));
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 28px;
-  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 8px 18px rgba(18, 128, 90, 0.3);
 }
 
 .crm-title {
