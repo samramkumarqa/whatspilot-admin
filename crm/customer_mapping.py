@@ -114,6 +114,23 @@ def init_customer_mapping():
             "ALTER TABLE customer_numbers ADD COLUMN twilio_whatsapp_number TEXT"
         )
 
+    # The business's own individually-allocated Groq API key, for
+    # provisioning to inject as that deployment's GROQ_API_KEY env var
+    # instead of this admin app's shared key (see
+    # provisioning/orchestrator.py's _env_vars_for_business()). NULL means
+    # "use the shared Groq account provisioning has always used" -
+    # existing businesses are unaffected. Unlike twilio_whatsapp_number,
+    # this is a real credential: list_businesses() below deliberately
+    # never returns the raw value, only whether one is set, so it isn't
+    # re-exposed to the browser on every Businesses-page load. get_business()
+    # does return it raw, since that's only ever consumed server-side by
+    # the provisioning retry path, never serialized straight into an HTTP
+    # response.
+    if "groq_api_key" not in existing_business_columns:
+        conn.execute(
+            "ALTER TABLE customer_numbers ADD COLUMN groq_api_key TEXT"
+        )
+
     # Customer → Business mapping table
     conn.execute("""
         CREATE TABLE IF NOT EXISTS customer_mapping (
@@ -297,7 +314,8 @@ def list_businesses():
             github_repo_url,
             render_service_id,
             render_service_url,
-            twilio_whatsapp_number
+            twilio_whatsapp_number,
+            groq_api_key
         FROM customer_numbers
         ORDER BY created_at DESC
         """
@@ -319,6 +337,10 @@ def list_businesses():
             "render_service_id": row[9],
             "render_service_url": row[10],
             "twilio_whatsapp_number": row[11],
+            # Never the raw key here - see the groq_api_key column comment
+            # in init_customer_mapping(). Just enough for the Businesses
+            # page to show "own key configured" vs the shared default.
+            "groq_api_key_configured": bool(row[12]),
         }
         for row in rows
     ]
@@ -358,7 +380,8 @@ def get_business(user_id: str):
             github_repo_url,
             twilio_whatsapp_number,
             render_service_id,
-            render_service_url
+            render_service_url,
+            groq_api_key
         FROM customer_numbers
         WHERE user_id = ?
         """,
@@ -380,6 +403,10 @@ def get_business(user_id: str):
         "twilio_whatsapp_number": row[6],
         "render_service_id": row[7],
         "render_service_url": row[8],
+        # Raw value, unlike list_businesses() - only ever consumed
+        # server-side by provision_business()'s retry path to rebuild
+        # this business's env vars, never serialized into an HTTP response.
+        "groq_api_key": row[9],
     }
 
 
@@ -510,7 +537,8 @@ def register_business(
     user_id: str,
     whatsapp_number: str,
     owner_whatsapp_number: str = None,
-    twilio_whatsapp_number: str = None
+    twilio_whatsapp_number: str = None,
+    groq_api_key: str = None
 ):
     """
     The "add business WhatsApp number" step of the admin activation flow -
@@ -528,6 +556,13 @@ def register_business(
     Almost always left blank at registration time, since Twilio
     registration is a manual, out-of-band step - see customer_numbers'
     schema comment in init_customer_mapping() for the full reasoning.
+
+    groq_api_key is likewise optional - a business's own individually
+    allocated Groq key, used instead of this admin app's shared key once
+    set (same _env_vars_for_business() fallback). Unlike the Twilio
+    number, there's no manual out-of-band step required first: an admin
+    can paste a business's own Groq key in at registration time and it
+    takes effect on first provisioning.
 
     Returns None if user_id is already registered - the caller (see
     api/businesses.py) turns that into a 409 rather than silently
@@ -606,10 +641,13 @@ def register_business(
         conn.execute(
             """
             INSERT INTO customer_numbers
-            (user_id, whatsapp_number, business_id, status, owner_whatsapp_number, provisioning_status, twilio_whatsapp_number)
-            VALUES (?, ?, ?, 'inactive', ?, 'pending', ?)
+            (user_id, whatsapp_number, business_id, status, owner_whatsapp_number, provisioning_status, twilio_whatsapp_number, groq_api_key)
+            VALUES (?, ?, ?, 'inactive', ?, 'pending', ?, ?)
             """,
-            (user_id, whatsapp_number, business_id, owner_whatsapp_number, twilio_whatsapp_number)
+            (
+                user_id, whatsapp_number, business_id, owner_whatsapp_number,
+                twilio_whatsapp_number, groq_api_key
+            )
         )
 
         conn.commit()
@@ -621,6 +659,11 @@ def register_business(
             "status": "inactive",
             "owner_whatsapp_number": owner_whatsapp_number,
             "twilio_whatsapp_number": twilio_whatsapp_number,
+            # Raw value, echoed back once directly to the admin who just
+            # typed it in this same request - see list_businesses()/
+            # get_business() above for why it's masked/server-only
+            # everywhere else.
+            "groq_api_key": groq_api_key,
         }
 
     except psycopg2.IntegrityError:

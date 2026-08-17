@@ -259,6 +259,76 @@ def test_provision_business_uses_own_number_when_set(isolated_db, monkeypatch):
     assert number_entry["value"] == "+14155559999"
 
 
+def test_provision_business_falls_back_to_shared_groq_key_when_none_set(
+    isolated_db, monkeypatch
+):
+    """
+    A business registered without its own groq_api_key (the default for
+    every business today) should still get a working GROQ_API_KEY env
+    var - falling back to the admin app's shared key, same as before
+    this field existed.
+    """
+
+    register_business("u1", "+14155550000")
+
+    monkeypatch.setattr(orchestrator, "GROQ_API_KEY", "shared-groq-key")
+
+    monkeypatch.setattr(
+        orchestrator, "create_repo_from_template", lambda *a, **k: FAKE_REPO
+    )
+    monkeypatch.setattr(orchestrator, "wait_for_repo_ready", lambda *a, **k: True)
+
+    captured = {}
+
+    def fake_create_service(name, repo_url, env_vars):
+        captured["env_vars"] = env_vars
+        return FAKE_SERVICE
+
+    monkeypatch.setattr(orchestrator, "create_web_service", fake_create_service)
+
+    orchestrator.provision_business("u1", "business_001")
+
+    key_entry = next(
+        item for item in captured["env_vars"] if item["key"] == "GROQ_API_KEY"
+    )
+    assert key_entry["value"] == "shared-groq-key"
+
+
+def test_provision_business_uses_own_groq_key_when_set(isolated_db, monkeypatch):
+    """
+    A business that already has its own groq_api_key on file (set at
+    registration, see api/businesses.py's RegisterBusinessRequest) should
+    get that key in its deployment's env vars instead of the shared one.
+    """
+
+    register_business(
+        "u1", "+14155550000",
+        groq_api_key="gsk_own1234567890abcdef1234"
+    )
+
+    monkeypatch.setattr(orchestrator, "GROQ_API_KEY", "shared-groq-key")
+
+    monkeypatch.setattr(
+        orchestrator, "create_repo_from_template", lambda *a, **k: FAKE_REPO
+    )
+    monkeypatch.setattr(orchestrator, "wait_for_repo_ready", lambda *a, **k: True)
+
+    captured = {}
+
+    def fake_create_service(name, repo_url, env_vars):
+        captured["env_vars"] = env_vars
+        return FAKE_SERVICE
+
+    monkeypatch.setattr(orchestrator, "create_web_service", fake_create_service)
+
+    orchestrator.provision_business("u1", "business_001")
+
+    key_entry = next(
+        item for item in captured["env_vars"] if item["key"] == "GROQ_API_KEY"
+    )
+    assert key_entry["value"] == "gsk_own1234567890abcdef1234"
+
+
 def test_provision_business_github_failure_records_failed_status(isolated_db, monkeypatch):
 
     register_business("u1", "+14155550000")

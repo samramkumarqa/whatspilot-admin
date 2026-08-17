@@ -510,6 +510,23 @@ input.field-invalid {
     >
     <div id="bizTwilioNumberError" class="field-error"></div>
 
+    <label>Groq API Key (optional - only if this business has its own)</label>
+    <div class="field-hint">
+        Leave this blank to keep using the shared Groq account, same as
+        every business by default. Fill it in only if this business has
+        its own key from console.groq.com - their AI replies then run on
+        their own key/rate limit instead of the shared one.
+    </div>
+    <input
+        id="bizGroqKey"
+        type="password"
+        placeholder="gsk_..."
+        maxlength="200"
+        autocomplete="off"
+        oninput="sanitizeGroqKeyField(this)"
+    >
+    <div id="bizGroqKeyError" class="field-error"></div>
+
     <button id="registerBtn" onclick="registerBusiness()">
         Add Business
     </button>
@@ -557,7 +574,8 @@ const FIELD_LIMITS = {
     bizWhatsappNumber: 16,
     bizUserId: 50,
     bizOwnerNumber: 16,
-    bizTwilioNumber: 16
+    bizTwilioNumber: 16,
+    bizGroqKey: 200
 };
 
 function showFieldError(fieldId, message) {
@@ -599,6 +617,14 @@ function sanitizeUserIdField(el) {
     clearFieldError("bizUserId");
 }
 
+// Groq API keys are alphanumeric plus underscore/hyphen (e.g. "gsk_...") -
+// same allowlist the server enforces (see api/businesses.py's
+// RegisterBusinessRequest.groq_api_key pattern).
+function sanitizeGroqKeyField(el) {
+    el.value = el.value.replace(/[^A-Za-z0-9_\-]/g, "");
+    clearFieldError("bizGroqKey");
+}
+
 function validatePhone(value, label, required) {
     if (!value)
         return required ? `${label} is required.` : null;
@@ -622,12 +648,29 @@ function validateUserId(value) {
     return null;
 }
 
+function validateGroqKey(value) {
+    if (!value)
+        return null;
+
+    if (value.length < 20)
+        return "Groq API Key looks too short - check you copied the whole key.";
+
+    if (value.length > FIELD_LIMITS.bizGroqKey)
+        return `Groq API Key must be ${FIELD_LIMITS.bizGroqKey} characters or fewer.`;
+
+    if (!/^[A-Za-z0-9_\-]+$/.test(value))
+        return "Groq API Key can only contain letters, numbers, underscores, and hyphens.";
+
+    return null;
+}
+
 async function registerBusiness() {
 
     const whatsappNumber = document.getElementById("bizWhatsappNumber").value.trim();
     const userId = document.getElementById("bizUserId").value.trim();
     const ownerNumber = document.getElementById("bizOwnerNumber").value.trim();
     const twilioNumber = document.getElementById("bizTwilioNumber").value.trim();
+    const groqKey = document.getElementById("bizGroqKey").value.trim();
 
     const whatsappError = validatePhone(whatsappNumber, "Business WhatsApp Number", true);
     if (whatsappError) {
@@ -657,6 +700,13 @@ async function registerBusiness() {
     }
     clearFieldError("bizTwilioNumber");
 
+    const groqError = validateGroqKey(groqKey);
+    if (groqError) {
+        showFieldError("bizGroqKey", groqError);
+        return;
+    }
+    clearFieldError("bizGroqKey");
+
     const registerBtn = document.getElementById("registerBtn");
     registerBtn.disabled = true;
 
@@ -671,7 +721,8 @@ async function registerBusiness() {
                 user_id: userId,
                 whatsapp_number: whatsappNumber,
                 owner_whatsapp_number: ownerNumber || null,
-                twilio_whatsapp_number: twilioNumber || null
+                twilio_whatsapp_number: twilioNumber || null,
+                groq_api_key: groqKey || null
             })
         });
 
@@ -701,6 +752,7 @@ async function registerBusiness() {
         document.getElementById("bizUserId").value = "";
         document.getElementById("bizOwnerNumber").value = "";
         document.getElementById("bizTwilioNumber").value = "";
+        document.getElementById("bizGroqKey").value = "";
 
         await loadBusinesses();
 
@@ -874,6 +926,9 @@ function createBusinessRow(biz) {
                 ${biz.twilio_whatsapp_number
                     ? ` · Twilio: ${escapeHtml(biz.twilio_whatsapp_number)}`
                     : ` · Twilio: shared Sandbox number`}
+                ${biz.groq_api_key_configured
+                    ? ` · Groq: own key configured`
+                    : ` · Groq: shared key`}
             </div>
             ${provisioningRowHtml(biz)}
         </div>

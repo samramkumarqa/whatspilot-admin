@@ -29,7 +29,8 @@ def _repo_name_for_business(business_id: str) -> str:
 
 
 def _env_vars_for_business(
-    business_id: str, twilio_whatsapp_number: str = None
+    business_id: str, twilio_whatsapp_number: str = None,
+    groq_api_key: str = None
 ) -> list:
     """
     Env vars every new business-portal deployment needs, matching
@@ -58,8 +59,16 @@ def _env_vars_for_business(
     regardless of which business it belongs to, so splitting it per
     business would add complexity without fixing anything.
 
-    GROQ_API_KEY also stays shared for now - a single Groq account
-    serves every customer's AI, same as before this parameter existed.
+    GROQ_API_KEY: same fallback pattern as the WhatsApp number above -
+    uses the business's own individually-allocated Groq key (see
+    customer_numbers.groq_api_key and register_business()) when one has
+    been set, falling back to this admin app's shared GROQ_API_KEY
+    otherwise. Isolates one business's AI usage/rate limits from every
+    other business's once they have their own key, and lets AI cost be
+    attributed per business instead of all landing on this app's shared
+    account. Unlike the Twilio number, a business's own key can be set
+    straight from the Add Business form - no manual out-of-band Twilio/Meta
+    step is needed first.
 
     DATABASE_URL: uses BUSINESS_PORTAL_DATABASE_URL (a least-privilege
     Postgres role - see provisioning/setup_business_portal_role.py) when
@@ -87,7 +96,10 @@ def _env_vars_for_business(
             "value": twilio_whatsapp_number or TWILIO_WHATSAPP_NUMBER,
         },
         {"key": "OTP_CHANNEL", "value": OTP_CHANNEL},
-        {"key": "GROQ_API_KEY", "value": GROQ_API_KEY},
+        {
+            "key": "GROQ_API_KEY",
+            "value": groq_api_key or GROQ_API_KEY,
+        },
         {"key": "DEBUG", "value": "false"},
         {"key": "PYTHON_VERSION", "value": "3.11.9"},
     ]
@@ -226,6 +238,10 @@ def provision_business(user_id: str, business_id: str) -> dict:
                 business_id,
                 twilio_whatsapp_number=(
                     existing_business.get("twilio_whatsapp_number")
+                    if existing_business else None
+                ),
+                groq_api_key=(
+                    existing_business.get("groq_api_key")
                     if existing_business else None
                 ),
             ),

@@ -22,6 +22,7 @@ from crm.customer_mapping import (
     get_business_by_login_number,
     get_owning_business_user_id,
     save_mapping,
+    update_provisioning_result,
 )
 from api.businesses import (
     get_businesses,
@@ -168,6 +169,21 @@ def test_create_business_route_passes_through_twilio_whatsapp_number(isolated_db
 
     assert result["status"] == "success"
     assert result["business"]["twilio_whatsapp_number"] == "+14155551234"
+
+
+def test_create_business_route_passes_through_groq_api_key(isolated_db):
+    result = asyncio.run(create_business(
+        RegisterBusinessRequest(
+            user_id="u1",
+            whatsapp_number="+14155550000",
+            groq_api_key="gsk_own1234567890abcdef1234"
+        )
+    ))
+
+    assert result["status"] == "success"
+    # Echoed back once, directly to the admin who just typed it - see
+    # crm/customer_mapping.py's register_business() docstring.
+    assert result["business"]["groq_api_key"] == "gsk_own1234567890abcdef1234"
 
 
 def test_create_business_route_rejects_duplicate_with_409(isolated_db):
@@ -344,15 +360,28 @@ def test_provision_business_route_rejects_retry_on_already_live_business(
 
     import api.businesses as businesses_module
 
+    # The real provision_business() (provisioning/orchestrator.py) always
+    # persists its result via update_provisioning_result() before
+    # returning - this fake has to do the same, or the business's DB row
+    # never actually reaches provisioning_status='live'. Without that,
+    # provision_business_route()'s own get_business() lookup below would
+    # see the row still at 'pending' (set at registration) and proceed to
+    # call provision_business() again - passing this test for the wrong
+    # reason (a mismatched fake) rather than because the 409 guard works.
+    live_result = {
+        "provisioning_status": "live",
+        "provisioning_error": None,
+        "github_repo_url": "https://github.com/samramkumarqa/whatspilot-business_001",
+        "render_service_id": "srv-abc123",
+        "render_service_url": "https://whatspilot-business_001.onrender.com",
+    }
+
+    def _fake_provision_business(user_id, business_id):
+        update_provisioning_result(user_id, **live_result)
+        return live_result
+
     monkeypatch.setattr(
-        businesses_module, "provision_business",
-        lambda user_id, business_id: {
-            "provisioning_status": "live",
-            "provisioning_error": None,
-            "github_repo_url": "https://github.com/samramkumarqa/whatspilot-business_001",
-            "render_service_id": "srv-abc123",
-            "render_service_url": "https://whatspilot-business_001.onrender.com",
-        }
+        businesses_module, "provision_business", _fake_provision_business
     )
 
     asyncio.run(create_business(
@@ -415,6 +444,54 @@ def test_get_business_twilio_whatsapp_number_round_trips_when_set(isolated_db):
     assert listed["twilio_whatsapp_number"] == "+14155551234"
 
 
+def test_get_business_groq_api_key_defaults_to_none(isolated_db):
+    register_business("u1", "+14155550000")
+
+    business = get_business("u1")
+
+    assert business["groq_api_key"] is None
+
+
+def test_get_business_groq_api_key_round_trips_raw(isolated_db):
+    """
+    get_business() returns the raw key - it's only ever consumed
+    server-side by provisioning's retry path (see orchestrator.py's
+    provision_business()), never serialized straight into an HTTP
+    response, so there's no leak risk in returning it raw here.
+    """
+
+    register_business(
+        "u1", "+14155550000",
+        groq_api_key="gsk_own1234567890abcdef1234"
+    )
+
+    business = get_business("u1")
+
+    assert business["groq_api_key"] == "gsk_own1234567890abcdef1234"
+
+
+def test_list_businesses_never_exposes_raw_groq_api_key(isolated_db):
+    """
+    Unlike twilio_whatsapp_number, a Groq key is a real credential -
+    list_businesses() backs GET /business-registry, which the Businesses
+    page re-fetches on every load/action, so it must never round-trip the
+    raw key back to the browser. Only a boolean "is one configured" flag.
+    """
+
+    register_business(
+        "u1", "+14155550000",
+        groq_api_key="gsk_own1234567890abcdef1234"
+    )
+    register_business("u2", "+14155550001")
+
+    businesses = {b["user_id"]: b for b in list_businesses()}
+
+    assert "groq_api_key" not in businesses["u1"]
+    assert businesses["u1"]["groq_api_key_configured"] is True
+    assert "groq_api_key" not in businesses["u2"]
+    assert businesses["u2"]["groq_api_key_configured"] is False
+
+
 def test_get_businesses_route_lists_all(isolated_db):
     asyncio.run(create_business(
         RegisterBusinessRequest(user_id="u1", whatsapp_number="+14155550000")
@@ -473,6 +550,38 @@ def test_register_request_rejects_invalid_twilio_whatsapp_number():
             user_id="u1",
             whatsapp_number="+14155550000",
             twilio_whatsapp_number="abc"
+        )
+
+
+def test_register_request_allows_missing_groq_api_key():
+    request = RegisterBusinessRequest(user_id="u1", whatsapp_number="+14155550000")
+    assert request.groq_api_key is None
+
+
+def test_register_request_accepts_valid_groq_api_key():
+    request = RegisterBusinessRequest(
+        user_id="u1",
+        whatsapp_number="+14155550000",
+        groq_api_key="gsk_own1234567890abcdef1234"
+    )
+    assert request.groq_api_key == "gsk_own1234567890abcdef1234"
+
+
+def test_register_request_rejects_too_short_groq_api_key():
+    with pytest.raises(ValidationError):
+        RegisterBusinessRequest(
+            user_id="u1",
+            whatsapp_number="+14155550000",
+            groq_api_key="tooshort"
+        )
+
+
+def test_register_request_rejects_groq_api_key_with_invalid_chars():
+    with pytest.raises(ValidationError):
+        RegisterBusinessRequest(
+            user_id="u1",
+            whatsapp_number="+14155550000",
+            groq_api_key="gsk_has a space in it!!"
         )
 
 

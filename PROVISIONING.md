@@ -41,7 +41,7 @@ hand.
 | `TWILIO_AUTH_TOKEN` | Forwarded to each new deployment | Twilio Console -> Account Dashboard (click the eye icon) |
 | `TWILIO_VERIFY_SERVICE_SID` | Forwarded to each new deployment (OTP login) | Twilio Console -> Verify -> your Verify Service |
 | `TWILIO_WHATSAPP_NUMBER` | Forwarded to each new deployment *unless* that business has its own number set (see below) | Your Twilio WhatsApp Sandbox number, used as the default/fallback |
-| `GROQ_API_KEY` | Forwarded to each new deployment (AI replies) | console.groq.com |
+| `GROQ_API_KEY` | Forwarded to each new deployment *unless* that business has its own key set (see below) | console.groq.com, used as the default/fallback |
 | `OTP_CHANNEL` | Forwarded to each new deployment | Defaults to `sms` - only change if you switch OTP delivery |
 
 ### Giving a business its own WhatsApp number
@@ -82,6 +82,39 @@ number. Instead, update the number by hand in two places: the
 `twilio_whatsapp_number` column on that business's row (so it's on
 record and any *future* re-provisioning picks it up correctly), and the
 `TWILIO_WHATSAPP_NUMBER` env var on that business's *existing* Render
+service directly (Render dashboard -> that service -> Environment).
+
+### Giving a business its own Groq AI key
+
+By default every business shares the one `GROQ_API_KEY` above - one Groq
+account serves every customer's AI replies, lead scoring, and follow-up
+drafting. The "Groq API Key" field on the Add Business form (backed by
+`customer_numbers.groq_api_key`, see `crm/customer_mapping.py`) lets a
+specific business use its own individually-allocated key instead -
+useful once a business's usage grows enough that you want its AI
+rate limit/cost isolated from every other business rather than all of
+them competing for the same shared account.
+
+Unlike the Twilio number above, there's no manual out-of-band step
+required first - a Groq key from [console.groq.com](https://console.groq.com)
+(API Keys page) works as soon as it's pasted into the form. Set it when
+*registering* a new business and it flows through automatically on
+first provisioning, same mechanism as `twilio_whatsapp_number`. Leave it
+blank for every other business; they keep using the shared key
+unaffected.
+
+The key is treated as a real credential, not a display value like the
+phone number above: `GET /business-registry` (the list the Businesses
+page loads) never returns the raw key, only whether one is set
+(`groq_api_key_configured`) - so it isn't re-exposed to the browser on
+every page load. It's only echoed back once, directly in the response
+to the registration request that just set it.
+
+For a business that's already live and provisioned, same caveat as the
+Twilio number: don't use this field or **Retry Setup** to switch it
+over, since that would spin up a duplicate Render service. Update it by
+hand in two places instead: the `groq_api_key` column on that business's
+row, and the `GROQ_API_KEY` env var on that business's *existing* Render
 service directly (Render dashboard -> that service -> Environment).
 
 ## Before it'll work: Render's GitHub access

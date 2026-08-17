@@ -62,6 +62,19 @@ class RegisterBusinessRequest(BaseModel):
         default=None, pattern=PHONE_PATTERN
     )
 
+    # A business's own individually-allocated Groq API key (console.groq.com
+    # -> API Keys), used instead of this admin app's shared GROQ_API_KEY once
+    # set (see provisioning/orchestrator.py's _env_vars_for_business()).
+    # Optional - leaving it blank means the business's AI replies keep
+    # running on the shared account, same as every business before this
+    # field existed. Length/charset matches Groq's own key format
+    # (e.g. "gsk_" followed by alphanumerics); not validated further since
+    # a wrong key just fails at Groq's API, not this app's.
+    groq_api_key: str | None = Field(
+        default=None, min_length=20, max_length=200,
+        pattern=r"^[A-Za-z0-9_\-]+$"
+    )
+
 
 class UpdateBusinessStatusRequest(BaseModel):
 
@@ -96,7 +109,8 @@ async def create_business(request: RegisterBusinessRequest):
         request.user_id,
         request.whatsapp_number,
         request.owner_whatsapp_number,
-        request.twilio_whatsapp_number
+        request.twilio_whatsapp_number,
+        request.groq_api_key
     )
 
     if result is None:
