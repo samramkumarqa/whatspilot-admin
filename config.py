@@ -67,15 +67,16 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 # as before until the setup script has actually been run.
 BUSINESS_PORTAL_DATABASE_URL = os.getenv("BUSINESS_PORTAL_DATABASE_URL")
 
-# Shared across every provisioned business-portal deployment for now -
-# one Twilio WhatsApp Sandbox number and one Groq account serve every
-# customer, same as the two businesses set up manually before this
-# pipeline existed. Giving each customer their own WhatsApp Business
-# API number is a largely manual, Twilio-side approval process this
-# pipeline doesn't attempt to automate - revisit if/when that becomes a
-# real requirement, at which point these would need to move from
-# "shared config the admin app forwards" to "collected per-business at
-# registration time" instead.
+# Fallbacks used for every business that hasn't set its own value.
+# TWILIO_ACCOUNT_SID/AUTH_TOKEN/TWILIO_VERIFY_SERVICE_SID/OTP_CHANNEL stay
+# fully shared - see provisioning/orchestrator.py's _env_vars_for_business()
+# for why splitting those per-business wouldn't fix anything. But
+# TWILIO_WHATSAPP_NUMBER and GROQ_API_KEY *can* be overridden per business
+# now (customer_numbers.twilio_whatsapp_number / .groq_api_key, set via the
+# Add Business form) - these two shared values are only what a business
+# falls back to until it has its own number/key set. See PROVISIONING.md's
+# "Giving a business its own WhatsApp number" / "...own Groq AI key"
+# sections for the manual steps involved.
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_VERIFY_SERVICE_SID = os.getenv("TWILIO_VERIFY_SERVICE_SID")
